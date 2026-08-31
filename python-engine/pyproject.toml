@@ -1,0 +1,17 @@
+[project]
+name = "point-eight-engine"
+version = "0.0.1"
+description = "El Motor de Compatibilidad — simulación Monte Carlo + Markov de relaciones"
+requires-python = ">=3.12"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

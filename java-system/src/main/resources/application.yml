@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: el-sistema
+  datasource:
+    url: ${SYSTEM_DB_URL:jdbc:postgresql://localhost:5433/pointeight_system}
+    username: ${SYSTEM_DB_USER:pointeight}
+    password: ${SYSTEM_DB_PASSWORD:pointeight}
+  jpa:
+    hibernate:
+      ddl-auto: ${SYSTEM_DB_DDL:update}
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:pointeight}
+    password: ${RABBITMQ_PASSWORD:pointeight}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+pointeight:
+  engine:
+    base-url: ${ENGINE_BASE_URL:http://localhost:8000}
+  match:
+    # Duración por defecto de un match cuando el alta no la especifica (12 h).
+    default-expiry-seconds: ${MATCH_DEFAULT_EXPIRY_SECONDS:43200}
+
+logging:
+  level:
+    com.pointeight: DEBUG

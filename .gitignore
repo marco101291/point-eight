@@ -1,0 +1,26 @@
+# Java
+java-system/build/
+java-system/.gradle/
+*.class
+
+# Python
+python-engine/.venv/
+python-engine/__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+admin-panel/.next/
+admin-panel/out/
+
+# Entorno
+.env
+*.local
+
+# Editores / SO
+.idea/
+.vscode/
+.DS_Store

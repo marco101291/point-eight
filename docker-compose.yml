@@ -1,0 +1,115 @@
+name: point-eight
+
+services:
+  # --- Infraestructura ---------------------------------------------------
+  postgres-system:
+    image: postgres:16-alpine
+    container_name: pointeight-db-system
+    environment:
+      POSTGRES_DB: ${SYSTEM_DB_NAME:-pointeight_system}
+      POSTGRES_USER: ${SYSTEM_DB_USER:-pointeight}
+      POSTGRES_PASSWORD: ${SYSTEM_DB_PASSWORD:-pointeight}
+    ports:
+      - "${SYSTEM_DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata-system:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SYSTEM_DB_USER:-pointeight}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-engine:
+    image: postgres:16-alpine
+    container_name: pointeight-db-engine
+    environment:
+      POSTGRES_DB: ${ENGINE_DB_NAME:-pointeight_engine}
+      POSTGRES_USER: ${ENGINE_DB_USER:-pointeight}
+      POSTGRES_PASSWORD: ${ENGINE_DB_PASSWORD:-pointeight}
+    ports:
+      - "${ENGINE_DB_PORT:-5435}:5432"
+    volumes:
+      - pgdata-engine:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ENGINE_DB_USER:-pointeight}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: pointeight-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-pointeight}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-pointeight}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # --- Servicios ---------------------------------------------------------
+  java-system:
+    build: ./java-system
+    container_name: pointeight-system
+    depends_on:
+      postgres-system:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SYSTEM_DB_URL: jdbc:postgresql://postgres-system:5432/${SYSTEM_DB_NAME:-pointeight_system}
+      SYSTEM_DB_USER: ${SYSTEM_DB_USER:-pointeight}
+      SYSTEM_DB_PASSWORD: ${SYSTEM_DB_PASSWORD:-pointeight}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-pointeight}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-pointeight}
+      ENGINE_BASE_URL: http://python-engine:8000
+    ports:
+      - "${JAVA_SYSTEM_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  python-engine:
+    build: ./python-engine
+    container_name: pointeight-engine
+    depends_on:
+      postgres-engine:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      ENGINE_DATABASE_URL: postgresql+psycopg://${ENGINE_DB_USER:-pointeight}:${ENGINE_DB_PASSWORD:-pointeight}@postgres-engine:5432/${ENGINE_DB_NAME:-pointeight_engine}
+      ENGINE_RABBITMQ_URL: amqp://${RABBITMQ_USER:-pointeight}:${RABBITMQ_PASSWORD:-pointeight}@rabbitmq:5672/
+    ports:
+      - "${PYTHON_ENGINE_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  admin-panel:
+    build: ./admin-panel
+    container_name: pointeight-admin
+    depends_on:
+      - java-system
+      - python-engine
+    environment:
+      SYSTEM_BASE_URL: http://java-system:8080
+      ENGINE_BASE_URL: http://python-engine:8000
+    ports:
+      - "${ADMIN_PANEL_PORT:-3001}:3000"
+
+volumes:
+  pgdata-system:
+  pgdata-engine:
