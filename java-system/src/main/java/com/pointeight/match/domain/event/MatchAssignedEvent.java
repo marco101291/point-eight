@@ -6,7 +6,7 @@ import com.pointeight.user.domain.UserId;
 import java.time.Duration;
 import java.time.Instant;
 
-/** El Sistema asignó un match. Unilateral: nadie lo eligió ni lo aceptó. */
+/** The System assigned a match. Unilateral: nobody chose it or accepted it. */
 public record MatchAssignedEvent(
     MatchId matchId, UserId userAId, UserId userBId, Duration expiryDuration, Instant occurredAt)
     implements DomainEvent {}

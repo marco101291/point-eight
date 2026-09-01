@@ -1,15 +1,15 @@
 package com.pointeight.user.domain;
 
 /**
- * Confianza acumulada del usuario en el Sistema. Sube a medida que los matches asignados terminan
- * como el Sistema predijo.
+ * The user's cumulative confidence in the System. Rises as assigned matches end the way the
+ * System predicted.
  */
 public record ConfidenceScore(double value) {
 
   public ConfidenceScore {
     if (value < 0.0 || value > 1.0 || Double.isNaN(value)) {
       throw new IllegalArgumentException(
-          "ConfidenceScore debe estar entre 0.0 y 1.0, llegó " + value);
+          "ConfidenceScore must be between 0.0 and 1.0, got " + value);
     }
   }
 

@@ -8,11 +8,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Lo único que el mundo exterior ve de un usuario.
+ * The only thing the outside world sees of a user.
  *
- * <p>Declara exclusivamente campos de Capa 1. La Capa 2 — apego, jinetes de Gottman, infidelidad,
- * adicción, estrés basal — no tiene dónde entrar en este record, así que no puede filtrarse por
- * descuido: la garantía es estructural, no una lista de exclusiones que alguien tenga que mantener.
+ * <p>Declares exclusively Layer 1 fields. Layer 2 — attachment, Gottman's horsemen, infidelity,
+ * addiction, baseline stress — has nowhere to enter this record, so it can't leak by accident: the
+ * guarantee is structural, not a list of exclusions someone has to maintain.
  */
 public record UserResponse(
     String id,

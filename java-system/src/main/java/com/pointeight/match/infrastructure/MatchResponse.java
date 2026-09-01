@@ -5,7 +5,7 @@ import com.pointeight.match.domain.Match;
 import com.pointeight.match.domain.MatchStatus;
 import java.time.Instant;
 
-/** Vista externa de un match. {@code compatibilityScore} es null hasta que el Motor lo calcule. */
+/** External view of a match. {@code compatibilityScore} is null until the Engine calculates it. */
 public record MatchResponse(
     String id,
     String userAId,

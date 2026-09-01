@@ -1,6 +1,6 @@
 package com.pointeight.shared.domain;
 
-/** Se pidió un aggregate que no existe. El adapter HTTP la traduce a 404. */
+/** A nonexistent aggregate was requested. The HTTP adapter translates it to 404. */
 public abstract class ResourceNotFoundException extends DomainException {
 
   protected ResourceNotFoundException(String message) {

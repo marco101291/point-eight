@@ -12,8 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Crea un match entre dos IDs dados. En M1 lo dispara un operador desde el admin panel; desde M4 lo
- * hace el Sistema solo al vencer el match anterior.
+ * Creates a match between two given IDs. In M1 an operator triggers it from the admin panel; from
+ * M4 on, the System does it on its own once the previous match expires.
  */
 @Service
 public class CreateManualMatchUseCase {

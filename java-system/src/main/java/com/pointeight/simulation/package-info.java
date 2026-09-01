@@ -1,6 +1,6 @@
 /**
- * Feature package "simulation". Se puebla a partir de M1 siguiendo Ports & Adapters:
- * {@code domain/} (aggregates, VOs, domain events, ports), {@code application/} (casos de uso),
- * {@code infrastructure/} (adapters JPA, REST, AMQP).
+ * Feature package "simulation". Populated from M1 on, following Ports &amp; Adapters:
+ * {@code domain/} (aggregates, VOs, domain events, ports), {@code application/} (use cases),
+ * {@code infrastructure/} (JPA, REST, AMQP adapters).
  */
 package com.pointeight.simulation;

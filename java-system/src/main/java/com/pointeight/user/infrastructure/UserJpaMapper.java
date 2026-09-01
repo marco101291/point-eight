@@ -7,7 +7,10 @@ import com.pointeight.user.domain.SimulationParameters;
 import com.pointeight.user.domain.User;
 import com.pointeight.user.domain.UserId;
 
-/** Traduce entre el aggregate puro y su representación JPA. Único lugar que conoce ambos lados. */
+/**
+ * Translates between the pure aggregate and its JPA representation. The only place that knows
+ * both sides.
+ */
 final class UserJpaMapper {
 
   private UserJpaMapper() {}

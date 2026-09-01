@@ -2,9 +2,12 @@ package com.pointeight.shared.domain;
 
 import java.time.Instant;
 
-/** Marcador de todo evento de dominio. Los eventos son inmutables y describen algo que ya pasó. */
+/**
+ * Marker for every domain event. Events are immutable and describe something that already
+ * happened.
+ */
 public interface DomainEvent {
 
-  /** Momento en que el evento ocurrió, no en que se publicó. */
+  /** When the event occurred, not when it was published. */
   Instant occurredAt();
 }

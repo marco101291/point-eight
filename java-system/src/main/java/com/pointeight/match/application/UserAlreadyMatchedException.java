@@ -4,11 +4,11 @@ import com.pointeight.shared.domain.DomainException;
 import com.pointeight.user.domain.UserId;
 
 /**
- * En el compound cada persona está en un único match a la vez. Se traduce a HTTP 409.
+ * In the compound, each person is in exactly one match at a time. Translated to HTTP 409.
  */
 public class UserAlreadyMatchedException extends DomainException {
 
   public UserAlreadyMatchedException(UserId userId) {
-    super("El usuario %s ya tiene un match sin terminar".formatted(userId));
+    super("User %s already has an unfinished match".formatted(userId));
   }
 }

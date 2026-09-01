@@ -11,7 +11,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Representación persistente del match. El aggregate {@code Match} no conoce esta clase. */
+/** Persistent representation of the match. The {@code Match} aggregate doesn't know this class. */
 @Entity
 @Table(
     name = "matches",
@@ -39,7 +39,7 @@ public class MatchJpaEntity {
   @Column(name = "status", nullable = false, length = 20)
   private MatchStatus status;
 
-  /** Nulo hasta que el Motor lo calcule (M2 en adelante). */
+  /** Null until the Engine calculates it (M2 onward). */
   @Column(name = "compatibility_score")
   private Double compatibilityScore;
 
@@ -53,7 +53,7 @@ public class MatchJpaEntity {
   private Instant endedAt;
 
   protected MatchJpaEntity() {
-    // Requerido por JPA.
+    // Required by JPA.
   }
 
   MatchJpaEntity(UUID id) {

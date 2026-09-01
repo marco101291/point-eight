@@ -8,7 +8,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Lecturas del aggregate User. */
+/** Reads of the User aggregate. */
 @Service
 @Transactional(readOnly = true)
 public class UserQueries {

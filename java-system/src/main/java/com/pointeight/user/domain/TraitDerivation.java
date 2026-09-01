@@ -3,17 +3,17 @@ package com.pointeight.user.domain;
 import java.util.Set;
 
 /**
- * Deriva los rasgos que el doc marca como "derivedFromProfession/Age": el Sistema los infiere, no
- * los pregunta. Es una función pura sobre la Capa 1.
+ * Derives the traits the doc marks as "derivedFromProfession/Age": the System infers them, it
+ * doesn't ask. It's a pure function over Layer 1.
  */
 public final class TraitDerivation {
 
-  /** Profesiones con jornada impredecible o carga emocional alta. */
+  /** Professions with unpredictable hours or high emotional load. */
   private static final Set<String> HIGH_STRESS =
       Set.of("medico", "medica", "enfermero", "enfermera", "cirujano", "cirujana", "abogado",
           "abogada", "policia", "bombero", "bombera", "periodista", "trader", "piloto", "militar");
 
-  /** Profesiones de ritmo estable y horario acotado. */
+  /** Professions with a steady pace and bounded hours. */
   private static final Set<String> LOW_STRESS =
       Set.of("bibliotecario", "bibliotecaria", "archivista", "jardinero", "jardinera", "ceramista",
           "traductor", "traductora", "docente", "contador", "contadora");
@@ -21,8 +21,8 @@ public final class TraitDerivation {
   private TraitDerivation() {}
 
   /**
-   * Estrés basal, 0..1. Arranca de la profesión y sube levemente en la treintena, la franja donde
-   * más se acumulan presiones simultáneas de carrera y pareja.
+   * Baseline stress, 0..1. Starts from the profession and rises slightly in one's thirties, the
+   * age range where career and relationship pressures pile up simultaneously the most.
    */
   public static double stressBaseline(String profession, int age) {
     String key = normalize(profession);
@@ -37,8 +37,8 @@ public final class TraitDerivation {
   }
 
   /**
-   * Ritmo esperado de compromiso, 0..1: cuánto empuja la persona hacia la próxima etapa. Crece con
-   * la edad y se aplana pasados los 50.
+   * Expected commitment pace, 0..1: how much the person pushes toward the next stage. Grows with
+   * age and flattens out past 50.
    */
   public static double commitmentPaceExpectation(int age) {
     if (age < 25) {
@@ -47,11 +47,14 @@ public final class TraitDerivation {
     if (age >= 50) {
       return 0.70;
     }
-    // Interpolación lineal entre los 25 (0.30) y los 50 (0.70).
+    // Linear interpolation between 25 (0.30) and 50 (0.70).
     return clamp(0.30 + ((age - 25) * (0.40 / 25.0)));
   }
 
-  /** Capa 2 por defecto cuando el alta no la aporta: apego seguro y comunicación neutra. */
+  /**
+   * Default Layer 2 when registration doesn't provide it: secure attachment and neutral
+   * communication.
+   */
   public static SimulationParameters defaultsFor(Profile profile) {
     return new SimulationParameters(
         AttachmentStyle.SECURE,

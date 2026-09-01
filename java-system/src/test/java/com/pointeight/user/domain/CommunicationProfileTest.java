@@ -37,7 +37,7 @@ class CommunicationProfileTest {
   }
 
   @Test
-  @DisplayName("el desprecio pesa el doble que el resto en la carga negativa")
+  @DisplayName("contempt weighs twice as much as the rest in the negative load")
   void elDesprecioPesaMas() {
     CommunicationProfile soloContempt = new CommunicationProfile(0.0, 1.0, 0.0, 0.0);
     CommunicationProfile soloCriticism = new CommunicationProfile(1.0, 0.0, 0.0, 0.0);

@@ -37,15 +37,15 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
- * El contrato que no se puede romper: la Capa 2 entra por la API y no vuelve a salir jamás.
+ * The contract that can't be broken: Layer 2 comes in through the API and never goes back out.
  *
- * <p>Se verifica en dos niveles — estructural (el record no declara esos campos) y sobre el JSON
- * real que devuelve el endpoint.
+ * <p>Verified at two levels — structurally (the record doesn't declare those fields) and against
+ * the real JSON the endpoint returns.
  */
 @WebMvcTest(UserController.class)
 class UserControllerTest {
 
-  /** Nombres que jamás pueden aparecer en una respuesta. */
+  /** Names that must never appear in a response. */
   private static final List<String> CAPA_2 =
       List.of(
           "attachment",
@@ -92,7 +92,7 @@ class UserControllerTest {
   }
 
   @Test
-  @DisplayName("UserResponse no declara ni un solo campo de Capa 2")
+  @DisplayName("UserResponse doesn't declare a single Layer 2 field")
   void elRecordNoTieneDondeFiltrar() {
     List<String> declared =
         Arrays.stream(UserResponse.class.getRecordComponents())
@@ -101,12 +101,12 @@ class UserControllerTest {
             .toList();
 
     assertThat(declared)
-        .as("campos declarados por UserResponse")
+        .as("fields declared by UserResponse")
         .noneSatisfy(name -> assertThat(CAPA_2).anySatisfy(hidden -> assertThat(name).contains(hidden)));
   }
 
   @Test
-  @DisplayName("el alta acepta Capa 2 pero no la devuelve")
+  @DisplayName("registration accepts Layer 2 but doesn't return it")
   void elAltaNoDevuelveCapa2() throws Exception {
     when(registerUser.execute(any(), any())).thenReturn(sampleUser());
 
@@ -146,7 +146,7 @@ class UserControllerTest {
   }
 
   @Test
-  @DisplayName("la consulta por id tampoco la devuelve")
+  @DisplayName("the query by id doesn't return it either")
   void laConsultaNoDevuelveCapa2() throws Exception {
     User user = sampleUser();
     when(queries.byId(any())).thenReturn(user);
@@ -164,7 +164,7 @@ class UserControllerTest {
   }
 
   @Test
-  @DisplayName("el listado tampoco")
+  @DisplayName("neither does the listing")
   void elListadoNoDevuelveCapa2() throws Exception {
     when(queries.page(0, 20)).thenReturn(List.of(sampleUser()));
     when(queries.total()).thenReturn(1L);
@@ -182,7 +182,7 @@ class UserControllerTest {
   }
 
   @Test
-  @DisplayName("un usuario inexistente da 404, no 500")
+  @DisplayName("a nonexistent user gives 404, not 500")
   void usuarioInexistente() throws Exception {
     UserId missing = UserId.newId();
     when(queries.byId(any())).thenThrow(new UserNotFoundException(missing));
@@ -190,17 +190,17 @@ class UserControllerTest {
     mockMvc
         .perform(get("/api/users/{id}", missing.toString()))
         .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.title").value("Recurso no encontrado"));
+        .andExpect(jsonPath("$.title").value("Resource not found"));
   }
 
   @Test
-  @DisplayName("un id con formato inválido da 400")
+  @DisplayName("a malformed id gives 400")
   void idInvalido() throws Exception {
     mockMvc.perform(get("/api/users/{id}", "no-soy-un-uuid")).andExpect(status().isBadRequest());
   }
 
   @Test
-  @DisplayName("una edad menor a 18 se rechaza en el borde")
+  @DisplayName("an age under 18 is rejected right at the edge")
   void edadInvalida() throws Exception {
     String body =
         objectMapper.writeValueAsString(

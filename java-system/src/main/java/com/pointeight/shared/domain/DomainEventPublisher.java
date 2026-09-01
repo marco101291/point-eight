@@ -3,8 +3,8 @@ package com.pointeight.shared.domain;
 import java.util.Collection;
 
 /**
- * Port de salida para publicar eventos de dominio. El dominio y los casos de uso dependen de esta
- * interfaz; el adapter que la implementa decide el mecanismo (Spring Events en M1, AMQP en M4).
+ * Outbound port for publishing domain events. The domain and use cases depend on this interface;
+ * the adapter that implements it decides the mechanism (Spring Events in M1, AMQP in M4).
  */
 public interface DomainEventPublisher {
 

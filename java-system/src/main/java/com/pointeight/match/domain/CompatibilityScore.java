@@ -1,15 +1,15 @@
 package com.pointeight.match.domain;
 
 /**
- * Proporción de simulaciones que sobrevivieron, 0..1. La calcula el Motor (Python) a partir de M2;
- * en M1 el match nace sin score.
+ * Proportion of simulations that survived, 0..1. Calculated by the Engine (Python) starting in
+ * M2; in M1 the match is born without a score.
  */
 public record CompatibilityScore(double value) {
 
   public CompatibilityScore {
     if (Double.isNaN(value) || value < 0.0 || value > 1.0) {
       throw new IllegalArgumentException(
-          "CompatibilityScore debe estar entre 0.0 y 1.0, llegó " + value);
+          "CompatibilityScore must be between 0.0 and 1.0, got " + value);
     }
   }
 

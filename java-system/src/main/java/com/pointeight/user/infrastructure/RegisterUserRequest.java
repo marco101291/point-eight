@@ -16,8 +16,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Alta de usuario. Los campos de Capa 2 son opcionales y <b>write-only</b>: se aceptan acá, pero no
- * existe ningún DTO que los devuelva. Si no vienen, el Sistema los deriva del perfil.
+ * User registration. Layer 2 fields are optional and <b>write-only</b>: they're accepted here, but
+ * no DTO ever returns them. If they're not provided, the System derives them from the profile.
  */
 public record RegisterUserRequest(
     @Min(18) @Max(120) int age,
@@ -27,7 +27,7 @@ public record RegisterUserRequest(
     @NotBlank String city,
     @NotBlank String profession,
     List<String> hobbies,
-    // --- Capa 2, opcional ---
+    // --- Layer 2, optional ---
     AttachmentStyle attachmentStyle,
     Double attachmentIntensity,
     CommunicationProfile communicationProfile,
@@ -42,8 +42,8 @@ public record RegisterUserRequest(
   }
 
   /**
-   * Capa 2 explícita, o {@code null} para que el aggregate aplique la derivación por defecto. Los
-   * rasgos derivables caen a {@link TraitDerivation} campo por campo cuando no se informan.
+   * Explicit Layer 2, or {@code null} so the aggregate applies the default derivation. Derivable
+   * traits fall back to {@link TraitDerivation} field by field when not provided.
    */
   public SimulationParameters toSimulationParameters() {
     boolean anyProvided =

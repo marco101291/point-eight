@@ -7,25 +7,25 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-/** La tabla de transiciones, verificada de forma exhaustiva. */
+/** The transition table, verified exhaustively. */
 class MatchStatusTest {
 
   @Test
-  @DisplayName("PENDING sólo puede activarse o rechazarse")
+  @DisplayName("PENDING can only be activated or rejected")
   void pendingTransitions() {
     assertThat(MatchStatus.PENDING.allowedTransitions())
         .containsExactlyInAnyOrder(MatchStatus.ACTIVE, MatchStatus.REJECTED);
   }
 
   @Test
-  @DisplayName("ACTIVE sólo puede expirar o rechazarse")
+  @DisplayName("ACTIVE can only expire or be rejected")
   void activeTransitions() {
     assertThat(MatchStatus.ACTIVE.allowedTransitions())
         .containsExactlyInAnyOrder(MatchStatus.EXPIRED, MatchStatus.REJECTED);
   }
 
   @Test
-  @DisplayName("EXPIRED y REJECTED son terminales")
+  @DisplayName("EXPIRED and REJECTED are terminal")
   void terminalStates() {
     assertThat(MatchStatus.EXPIRED.isTerminal()).isTrue();
     assertThat(MatchStatus.REJECTED.isTerminal()).isTrue();
@@ -34,14 +34,14 @@ class MatchStatusTest {
   }
 
   @Test
-  @DisplayName("PENDING y ACTIVE no son terminales")
+  @DisplayName("PENDING and ACTIVE are not terminal")
   void nonTerminalStates() {
     assertThat(MatchStatus.PENDING.isTerminal()).isFalse();
     assertThat(MatchStatus.ACTIVE.isTerminal()).isFalse();
   }
 
   @Test
-  @DisplayName("ningún estado puede transicionar hacia sí mismo")
+  @DisplayName("no state can transition to itself")
   void noSelfTransitions() {
     for (MatchStatus status : MatchStatus.values()) {
       assertThat(status.canTransitionTo(status)).as("%s -> %s", status, status).isFalse();
@@ -49,7 +49,7 @@ class MatchStatusTest {
   }
 
   @Test
-  @DisplayName("no se puede volver a PENDING desde ningún estado")
+  @DisplayName("PENDING can't be reached again from any state")
   void pendingIsUnreachable() {
     for (MatchStatus status : MatchStatus.values()) {
       assertThat(status.canTransitionTo(MatchStatus.PENDING)).isFalse();
@@ -58,7 +58,7 @@ class MatchStatusTest {
 
   @ParameterizedTest
   @EnumSource(MatchStatus.class)
-  @DisplayName("una transición nula nunca es válida")
+  @DisplayName("a null transition is never valid")
   void nullIsNeverAllowed(MatchStatus status) {
     assertThat(status.canTransitionTo(null)).isFalse();
   }

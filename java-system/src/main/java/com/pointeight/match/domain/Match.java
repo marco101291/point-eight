@@ -13,12 +13,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Aggregate root del match. POJO puro: toda la lógica del ciclo de vida vive acá y se puede testear
- * sin levantar Spring ni Postgres.
+ * Aggregate root of the match. Pure POJO: all lifecycle logic lives here and can be tested without
+ * spinning up Spring or Postgres.
  *
- * <p>Los eventos de dominio se acumulan en {@code pendingEvents}; el caso de uso los drena con
- * {@link #pullEvents()} después de persistir, para no publicar nada que la transacción vaya a
- * revertir.
+ * <p>Domain events accumulate in {@code pendingEvents}; the use case drains them with {@link
+ * #pullEvents()} after persisting, so nothing is published that the transaction ends up rolling
+ * back.
  */
 public class Match {
 
@@ -56,8 +56,8 @@ public class Match {
   }
 
   /**
-   * El Sistema propone un match. Nace en {@link MatchStatus#PENDING} y registra el evento de
-   * asignación.
+   * The System proposes a match. Born in {@link MatchStatus#PENDING} and records the assignment
+   * event.
    */
   public static Match propose(
       UserId userAId, UserId userBId, Duration expiryDuration, Clock clock) {
@@ -65,11 +65,11 @@ public class Match {
     Objects.requireNonNull(userBId, "userBId");
     Objects.requireNonNull(expiryDuration, "expiryDuration");
     if (userAId.equals(userBId)) {
-      throw new IllegalArgumentException("Un usuario no puede ser matcheado consigo mismo");
+      throw new IllegalArgumentException("A user cannot be matched with themselves");
     }
     if (expiryDuration.isZero() || expiryDuration.isNegative()) {
       throw new IllegalArgumentException(
-          "expiryDuration debe ser positiva, llegó " + expiryDuration);
+          "expiryDuration must be positive, got " + expiryDuration);
     }
 
     Instant now = Instant.now(clock);
@@ -89,7 +89,7 @@ public class Match {
     return match;
   }
 
-  /** Rehidratación desde persistencia. Sólo la usa el mapper del adapter; no emite eventos. */
+  /** Rehydration from persistence. Only used by the adapter's mapper; emits no events. */
   public static Match rehydrate(
       MatchId id,
       UserId userAId,
@@ -137,24 +137,24 @@ public class Match {
     this.status = next;
   }
 
-  /** El score llega del Motor (M2 en adelante) y sólo tiene sentido antes de que el match termine. */
+  /** The score comes from the Engine (M2 onward) and only makes sense before the match ends. */
   public void assignCompatibilityScore(CompatibilityScore score) {
     Objects.requireNonNull(score, "score");
     if (status.isTerminal()) {
       throw new IllegalStateException(
-          "No se puede puntuar el match %s: ya está en %s".formatted(id, status));
+          "Cannot score match %s: it's already %s".formatted(id, status));
     }
     this.compatibilityScore = score;
   }
 
-  // --- Consultas ----------------------------------------------------------
+  // --- Queries --------------------------------------------------------------
 
-  /** Momento en que el match vence. Vacío mientras no se haya activado. */
+  /** When the match is due. Empty while it hasn't been activated. */
   public Optional<Instant> expiresAt() {
     return Optional.ofNullable(activatedAt).map(start -> start.plus(expiryDuration));
   }
 
-  /** Si ya pasó su vencimiento estando activo. En M4 lo consulta el scheduler. */
+  /** Whether it's past its due date while active. Checked by the scheduler from M4 on. */
   public boolean isDue(Clock clock) {
     return status == MatchStatus.ACTIVE
         && expiresAt().map(at -> !Instant.now(clock).isBefore(at)).orElse(false);
@@ -164,7 +164,7 @@ public class Match {
     return userAId.equals(userId) || userBId.equals(userId);
   }
 
-  /** Devuelve los eventos acumulados y limpia el buffer. Idempotente en llamadas sucesivas. */
+  /** Returns the accumulated events and clears the buffer. Idempotent on successive calls. */
   public List<DomainEvent> pullEvents() {
     List<DomainEvent> drained = List.copyOf(pendingEvents);
     pendingEvents.clear();

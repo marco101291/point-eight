@@ -3,7 +3,7 @@ package com.pointeight;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-/** Punto de entrada de "El Sistema": orquestador, estado y reglas de negocio. */
+/** Entry point for "the System": orchestrator, state, and business rules. */
 @SpringBootApplication
 public class SystemApplication {
 

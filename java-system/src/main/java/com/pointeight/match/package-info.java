@@ -1,11 +1,11 @@
 /**
- * Feature package "match", organizado en Ports & Adapters:
+ * Feature package "match", organized as Ports &amp; Adapters:
  *
  * <ul>
- *   <li>{@code domain/} — aggregate, Value Objects, eventos y el port del repositorio. POJOs puros,
- *       sin una sola anotación de JPA ni de Spring.
- *   <li>{@code application/} — casos de uso: orquestan dominio y ports, sin saber de HTTP.
- *   <li>{@code infrastructure/} — adapters: entities JPA, mappers, controllers y DTOs.
+ *   <li>{@code domain/} — aggregate, Value Objects, events, and the repository port. Pure POJOs,
+ *       without a single JPA or Spring annotation.
+ *   <li>{@code application/} — use cases: orchestrate domain and ports, oblivious to HTTP.
+ *   <li>{@code infrastructure/} — adapters: JPA entities, mappers, controllers, and DTOs.
  * </ul>
  */
 package com.pointeight.match;

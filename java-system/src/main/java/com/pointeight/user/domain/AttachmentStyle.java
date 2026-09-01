@@ -1,6 +1,6 @@
 package com.pointeight.user.domain;
 
-/** Estilo de apego (Capa 2, nunca expuesto). Base del comportamiento del agente en el motor. */
+/** Attachment style (Layer 2, never exposed). The basis for the agent's behavior in the engine. */
 public enum AttachmentStyle {
   ANXIOUS,
   AVOIDANT,

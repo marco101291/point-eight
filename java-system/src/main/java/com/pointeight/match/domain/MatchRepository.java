@@ -4,21 +4,21 @@ import com.pointeight.user.domain.UserId;
 import java.util.List;
 import java.util.Optional;
 
-/** Port de salida del aggregate Match. */
+/** Outbound port of the Match aggregate. */
 public interface MatchRepository {
 
   Match save(Match match);
 
   Optional<Match> findById(MatchId id);
 
-  /** Página de matches ordenada por fecha de creación descendente, filtrable por estado. */
+  /** Page of matches ordered by creation date descending, filterable by status. */
   List<Match> findAll(MatchStatus status, int page, int size);
 
   long count(MatchStatus status);
 
-  /** Matches en los que participa el usuario, en cualquiera de los dos lados. */
+  /** Matches the user takes part in, on either side. */
   List<Match> findByUser(UserId userId);
 
-  /** Si el usuario ya tiene un match sin terminar (PENDING o ACTIVE). */
+  /** Whether the user already has an unfinished match (PENDING or ACTIVE). */
   boolean hasOpenMatch(UserId userId);
 }
