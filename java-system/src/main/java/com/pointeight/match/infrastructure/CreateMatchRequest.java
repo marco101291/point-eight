@@ -4,8 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 
 /**
- * Match manual entre dos IDs dados. {@code expiryDurationSeconds} es opcional: si no viene, se usa
- * {@code pointeight.match.default-expiry-seconds}.
+ * Manual match between two given IDs. {@code expiryDurationSeconds} is optional: if it's not
+ * provided, {@code pointeight.match.default-expiry-seconds} is used.
  */
 public record CreateMatchRequest(
     @NotBlank String userAId,

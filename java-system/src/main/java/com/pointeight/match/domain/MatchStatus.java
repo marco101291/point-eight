@@ -5,9 +5,9 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Ciclo de vida del match. El patrón State expresado como enum: cada constante declara a qué
- * estados puede moverse, así que la máquina de estados completa se lee de un vistazo y no hay forma
- * de agregar una transición sin tocar esta tabla.
+ * Match lifecycle. The State pattern expressed as an enum: each constant declares which states it
+ * can move to, so the whole state machine reads at a glance and no transition can be added without
+ * touching this table.
  *
  * <pre>
  *   PENDING ──activate──> ACTIVE ──expire──> EXPIRED (terminal)
@@ -17,16 +17,16 @@ import java.util.Set;
  */
 public enum MatchStatus {
 
-  /** Asignado por el Sistema, todavía no arrancó. */
+  /** Assigned by the System, hasn't started yet. */
   PENDING,
 
-  /** Corriendo: la pareja está junta hasta que expire el reloj. */
+  /** Running: the couple is together until the clock expires. */
   ACTIVE,
 
-  /** Llegó a término. El Sistema asigna el siguiente match (automático desde M4). */
+  /** Ran its course. The System assigns the next match (automatic from M4). */
   EXPIRED,
 
-  /** Cortado antes de término. */
+  /** Cut short before running its course. */
   REJECTED;
 
   private static final Set<MatchStatus> NONE = Collections.unmodifiableSet(EnumSet.noneOf(MatchStatus.class));
@@ -40,7 +40,7 @@ public enum MatchStatus {
     REJECTED.allowed = NONE;
   }
 
-  /** Estados a los que se puede pasar desde este. */
+  /** States this one can move to. */
   public Set<MatchStatus> allowedTransitions() {
     return allowed;
   }
@@ -49,7 +49,7 @@ public enum MatchStatus {
     return next != null && allowed.contains(next);
   }
 
-  /** Un estado terminal no admite ninguna transición saliente. */
+  /** A terminal state doesn't allow any outgoing transition. */
   public boolean isTerminal() {
     return allowed.isEmpty();
   }

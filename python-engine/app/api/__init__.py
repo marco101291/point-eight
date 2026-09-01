@@ -1,1 +1,1 @@
-"""Routers FastAPI. Sólo traducen HTTP <-> modelos Pydantic; sin lógica de dominio."""
+"""FastAPI routers. Only translate HTTP <-> Pydantic models; no domain logic."""

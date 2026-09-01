@@ -14,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-/** El ciclo de vida completo del match, sin Spring y sin base de datos. */
+/** The match's full lifecycle, without Spring and without a database. */
 class MatchTest {
 
   private static final Instant T0 = Instant.parse("2026-08-29T12:00:00Z");
@@ -29,7 +29,7 @@ class MatchTest {
   }
 
   @Nested
-  @DisplayName("al proponerse")
+  @DisplayName("when proposed")
   class Proposal {
 
     @Test
@@ -63,7 +63,7 @@ class MatchTest {
     void rechaza_matchear_a_alguien_consigo_mismo() {
       assertThatThrownBy(() -> Match.propose(alice, alice, TWELVE_HOURS, clock))
           .isInstanceOf(IllegalArgumentException.class)
-          .hasMessageContaining("consigo mismo");
+          .hasMessageContaining("matched with themselves");
     }
 
     @Test
@@ -76,7 +76,7 @@ class MatchTest {
   }
 
   @Nested
-  @DisplayName("transiciones legales")
+  @DisplayName("legal transitions")
   class LegalTransitions {
 
     @Test
@@ -93,7 +93,7 @@ class MatchTest {
     void ACTIVE_a_EXPIRED_emite_MatchExpiredEvent() {
       Match match = pendingMatch();
       match.activate(clock);
-      match.pullEvents(); // descarta el evento de asignación
+      match.pullEvents(); // discard the assignment event
 
       match.expire(clock);
 
@@ -138,7 +138,7 @@ class MatchTest {
   }
 
   @Nested
-  @DisplayName("transiciones ilegales")
+  @DisplayName("illegal transitions")
   class IllegalTransitions {
 
     @Test
@@ -147,7 +147,7 @@ class MatchTest {
 
       assertThatThrownBy(() -> match.expire(clock))
           .isInstanceOf(IllegalMatchTransitionException.class);
-      assertThat(match.status()).as("el estado no cambia").isEqualTo(MatchStatus.PENDING);
+      assertThat(match.status()).as("state doesn't change").isEqualTo(MatchStatus.PENDING);
     }
 
     @Test
@@ -192,7 +192,7 @@ class MatchTest {
   }
 
   @Nested
-  @DisplayName("score de compatibilidad")
+  @DisplayName("compatibility score")
   class Scoring {
 
     @Test
@@ -214,7 +214,7 @@ class MatchTest {
   }
 
   @Nested
-  @DisplayName("vencimiento")
+  @DisplayName("expiry")
   class Expiry {
 
     @Test
@@ -232,7 +232,7 @@ class MatchTest {
       Clock exactly = Clock.fixed(T0.plus(TWELVE_HOURS), ZoneOffset.UTC);
 
       assertThat(match.isDue(justBefore)).isFalse();
-      assertThat(match.isDue(exactly)).as("el borde exacto ya vence").isTrue();
+      assertThat(match.isDue(exactly)).as("the exact edge is already due").isTrue();
     }
 
     @Test
@@ -251,7 +251,7 @@ class MatchTest {
     Match match = pendingMatch();
 
     assertThat(match.pullEvents()).hasSize(1);
-    assertThat(match.pullEvents()).as("segunda llamada").isEmpty();
+    assertThat(match.pullEvents()).as("second call").isEmpty();
   }
 
   @Test

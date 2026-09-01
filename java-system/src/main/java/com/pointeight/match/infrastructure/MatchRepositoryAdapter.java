@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class MatchRepositoryAdapter implements MatchRepository {
 
-  /** Un match sin terminar ocupa al usuario: no puede recibir otro. */
+  /** An unfinished match keeps the user busy: they can't receive another one. */
   private static final Set<MatchStatus> OPEN =
       EnumSet.of(MatchStatus.PENDING, MatchStatus.ACTIVE);
 

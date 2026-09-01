@@ -1,6 +1,6 @@
 package com.pointeight.user.domain;
 
-/** Qué busca la persona. Filtro de Capa 1 (visible), se usa en las Specifications de M4. */
+/** What the person is looking for. A Layer 1 (visible) filter, used in M4's Specifications. */
 public enum SeekingType {
   CASUAL,
   SHORT_TERM,

@@ -1,18 +1,18 @@
-# Arquitectura — 0.8
+# Architecture — 0.8
 
-Documento vivo. La especificación de producto está en [`../hang-the-dj-sim.md`](../hang-the-dj-sim.md);
-acá se registran sólo las decisiones de implementación a medida que se toman.
+Living document. The product specification is in [`../hang-the-dj-sim.md`](../hang-the-dj-sim.md);
+this document records only implementation decisions as they're made.
 
-## Contexto (C4 nivel 1–2)
+## Context (C4 level 1–2)
 
 ```
         ┌──────────────┐
-        │ admin-panel  │  Next.js 15 — sólo presentación
+        │ admin-panel  │  Next.js 15 — presentation only
         └──────┬───────┘
                │ REST
         ┌──────▼───────────────┐        REST (M2) / AMQP (M4)      ┌──────────────────┐
         │  java-system         │◄────────────────────────────────► │  python-engine   │
-        │  "El Sistema"        │                                   │  "El Motor"      │
+        │  "The System"        │                                   │  "The Engine"    │
         │  Hexagonal + DDD     │                                   │  api→svc→domain  │
         └──────┬───────────────┘                                   └────────┬─────────┘
                │                          ┌──────────┐                      │
@@ -21,64 +21,93 @@ acá se registran sólo las decisiones de implementación a medida que se toman.
         └────────────────┘                                          └─────────────────┘
 ```
 
-Database per service: ninguno de los dos servicios lee la base del otro. La consistencia
-se logra por eventos, no por joins.
+Database per service: neither service reads the other's database. Consistency is achieved through
+events, not joins.
 
-## Decisiones tomadas
+## Decisions made
 
-### DEC-001 — Naming definitivo desde M0
-El doc de especificación proponía nombres provisionales (`hang-the-dj-sim`, `com.system`) a
-migrar en M1. Se adoptó directamente `point-eight` / `com.pointeight` para evitar un refactor
-de paquetes innecesario.
+### DEC-001 — Final naming from M0 on
+The spec doc proposed provisional names (`hang-the-dj-sim`, `com.system`) to migrate in M1.
+`point-eight` / `com.pointeight` was adopted directly to avoid an unnecessary package refactor.
 
-### DEC-002 — Build de Java dentro de Docker
-No se versiona el Gradle wrapper; el `Dockerfile` de `java-system` usa la imagen
-`gradle:8.10-jdk21` en la etapa de build. Permite trabajar sin JDK ni Gradle instalados.
-Si más adelante se quiere build local rápido, agregar el wrapper con `gradle wrapper`.
+### DEC-002 — Java build inside Docker
+The Gradle wrapper isn't version-controlled; `java-system`'s `Dockerfile` uses the
+`gradle:8.10-jdk21` image in the build stage. This allows working without a local JDK or Gradle.
+If a fast local build is wanted later on, add the wrapper with `gradle wrapper`.
 
-### DEC-003 — Estructura interna de los paquetes de Java
-Package-by-feature en el primer nivel (`match/`, `user/`, `simulation/`, `config/`) y
-Ports & Adapters dentro de cada feature (`domain/`, `application/`, `infrastructure/`).
-Los paquetes existen desde M0 con `package-info.java`; se pueblan en M1.
+### DEC-003 — Internal structure of the Java packages
+Package-by-feature at the top level (`match/`, `user/`, `simulation/`, `config/`) and
+Ports & Adapters inside each feature (`domain/`, `application/`, `infrastructure/`).
+The packages exist from M0 on with `package-info.java`; they get populated in M1.
 
-### DEC-004 — Dominio puro, separado de JPA
-Los aggregates `User` y `Match` son POJOs sin una sola anotación de JPA ni de Spring. La
-persistencia vive en `infrastructure/` como `<X>JpaEntity` + `<X>JpaMapper` + `<X>RepositoryAdapter`,
-que implementa el port declarado en `domain/`.
+### DEC-004 — Pure domain, separate from JPA
+The `User` and `Match` aggregates are POJOs without a single JPA or Spring annotation. Persistence
+lives in `infrastructure/` as `<X>JpaEntity` + `<X>JpaMapper` + `<X>RepositoryAdapter`, which
+implements the port declared in `domain/`.
 
-Cuesta el doble de código que anotar el aggregate directamente. Se paga porque: (a) es el ejercicio
-de Ports & Adapters que plantea el doc, y (b) hace que todo el dominio se teste con JUnit plano —
-los 63 tests de M1 corren en segundos sin levantar Spring ni Postgres.
+It costs twice the code of annotating the aggregate directly. That's paid for because: (a) it's the
+Ports & Adapters exercise the doc calls for, and (b) it lets the whole domain be tested with plain
+JUnit — M1's 63 tests run in seconds without spinning up Spring or Postgres.
 
-### DEC-005 — La máquina de estados como enum, no como jerarquía de clases
-El doc pide el patrón State para el ciclo de vida del match. Se implementa como tabla de
-transiciones dentro de `MatchStatus`: cada constante declara a qué estados puede moverse. Toda la
-máquina se lee de un vistazo y no se puede agregar una transición sin tocar esa tabla. Una jerarquía
-de clases `PendingState`/`ActiveState`/... sería más ceremonia para el mismo comportamiento, dado
-que los estados no tienen datos propios.
+### DEC-005 — The state machine as an enum, not a class hierarchy
+The doc asks for the State pattern for the match lifecycle. It's implemented as a transition table
+inside `MatchStatus`: each constant declares which states it can move to. The whole machine reads at
+a glance and no transition can be added without touching that table. A `PendingState`/`ActiveState`/
+... class hierarchy would be more ceremony for the same behavior, given that the states have no data
+of their own.
 
-### DEC-006 — `seekingGenders` es un conjunto, no un valor
-El doc lo escribe en singular (`seekingGender`). Se modela como `Set<Gender>` porque el filtro de
-Capa 1 de M4 tiene que poder expresar bisexualidad. Es un superconjunto estricto del doc.
+### DEC-006 — `seekingGenders` is a set, not a single value
+The doc writes it in the singular (`seekingGender`). It's modeled as `Set<Gender>` because M4's
+Layer 1 filter has to be able to express bisexuality. It's a strict superset of the doc.
 
-### DEC-007 — Un match abierto por usuario
-`CreateManualMatchUseCase` rechaza (409) armar un match si alguno de los dos ya tiene uno en
-`PENDING` o `ACTIVE`. En el compound cada persona está en una única relación a la vez; sin esta
-regla, M4 podría asignarle varios matches simultáneos al mismo usuario.
+### DEC-007 — One open match per user
+`CreateManualMatchUseCase` rejects (409) building a match if either party already has one in
+`PENDING` or `ACTIVE`. In the compound, each person is in a single relationship at a time; without
+this rule, M4 could assign the same user several simultaneous matches.
 
-### DEC-008 — `ddl-auto: update` hasta M6
-Hibernate genera y evoluciona el schema. El modelo todavía se mueve mucho (M2 suma el score, M3 el
-`SimulationRun`), así que escribir migraciones a mano ahora sería fricción pura. El costo asumido:
-el schema no queda versionado y las columnas renombradas quedan huérfanas. Se migra a Flyway en M6.
+### DEC-008 — `ddl-auto: update` until M6
+Hibernate generates and evolves the schema. The model still moves a lot (M2 adds the score, M3 adds
+`SimulationRun`), so hand-writing migrations now would be pure friction. The accepted cost: the
+schema isn't version-controlled and renamed columns are left orphaned. It migrates to Flyway in M6.
 
-## Pendiente de decidir
+### DEC-009 — Java → Python payload: envelope with `modelVersion`
+The alternative was flat JSON (`{ agentA, agentB }` with no metadata). An envelope
+(`{ modelVersion: "v0", agentA, agentB }`) was chosen because M3 is going to replace the random
+score with a real `run_batch`, and without a version field there would be no way to know which
+algorithm generated an already-persisted score. The Engine rejects any `modelVersion` it doesn't
+recognize with a 422, so the field isn't merely decorative from day one.
 
-- Formato del payload Java → Python (Factory, sección 2 del doc): JSON plano vs. envelope con
-  `modelVersion`. Se define en M2.
-- Estrategia de sincronización de perfiles hacia `python-engine`: ¿el payload lleva los perfiles
-  completos, o el motor mantiene una réplica propia alimentada por eventos? Se define en M4.
-- Persistencia en `python-engine`: SQLAlchemy vs. psycopg directo para `SimulationRun`. Se define en M3.
-- Quién dispara `activate` sobre un match `PENDING`: hoy es manual. En M4 el scheduler debería
-  activarlo apenas se asigna, o dejar `PENDING` como ventana de preparación con su propio timeout.
-- `cumulativeConfidenceScore` existe pero nunca se mueve: falta definir cómo lo ajusta el resultado
-  de un match. Depende de tener predicciones reales del Motor (M3).
+`AgentSnapshot` (`simulation/domain`) packages a user's `Profile` + `SimulationParameters`; it's the
+only place in the System where Layer 2 goes outward, deliberately kept separate from `UserResponse`
+so that record never risks inheriting that outbound path by accident. It follows the same pattern as
+DEC-004: infrastructure DTOs (`ProfileDto`, `SimulationParametersDto`, etc.) instead of serializing
+the domain records directly.
+
+### DEC-010 — The score is requested on a separate endpoint, not when the match is created
+`POST /api/matches/{id}/score` and its `RequestCompatibilityScoreUseCase` are independent of
+`CreateManualMatchUseCase`. The alternative — requesting the score within the same registration
+transaction — is simpler today, but in M4 the real trigger will be `MatchAssignedEvent`, not match
+creation; separating them now avoids touching `CreateManualMatchUseCase` when that milestone
+arrives.
+
+The HTTP client is `RestClient` (Spring 6.1+), not `WebClient`: it's Spring's current synchronous
+idiom and doesn't drag in the reactive module, which the rest of the project doesn't use. The
+adapter (`EngineCompatibilityClient`) translates `RestClientException` into
+`CompatibilityEngineException` — a pure Java type, no Spring — so the port in `domain/` doesn't
+force anyone to know about the concrete HTTP client; `GlobalExceptionHandler` maps it to 502.
+
+`CompatibilityAssessment.suggestedExpiry` (the duration the Engine suggests) still isn't applied to
+`Match.expiryDuration` — that field is `final` and today the System sets it when the match is
+created, not the Engine. Reconciling the two values is left open for when M3 produces a real score.
+
+## Open questions
+
+- Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
+  does the engine keep its own event-fed replica? To be defined in M4.
+- Persistence in `python-engine`: SQLAlchemy vs. direct psycopg for `SimulationRun`. To be defined
+  in M3.
+- Who triggers `activate` on a `PENDING` match: today it's manual. In M4 the scheduler should either
+  activate it as soon as it's assigned, or leave `PENDING` as a preparation window with its own
+  timeout.
+- `cumulativeConfidenceScore` exists but never moves: still need to define how a match's outcome
+  adjusts it. Depends on having real predictions from the Engine (M3).

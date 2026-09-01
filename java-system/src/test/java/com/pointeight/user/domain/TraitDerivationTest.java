@@ -10,12 +10,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** La Capa 2 que el Sistema infiere sin preguntarle nada al usuario. */
+/** The Layer 2 the System infers without asking the user anything. */
 class TraitDerivationTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"medico", "Médica", "  ABOGADO  ", "cirujana"})
-  @DisplayName("las profesiones de alto estrés suben el basal, sin importar mayúsculas ni tildes")
+  @DisplayName("high-stress professions raise the baseline, regardless of case or accents")
   void altoEstres(String profession) {
     assertThat(TraitDerivation.stressBaseline(profession, 22)).isCloseTo(0.75, within(1e-9));
   }
@@ -31,7 +31,7 @@ class TraitDerivationTest {
   }
 
   @Test
-  @DisplayName("la franja 28-42 suma presión")
+  @DisplayName("the 28-42 age range adds pressure")
   void ajustePorEdad() {
     assertThat(TraitDerivation.stressBaseline("astronauta", 35)).isCloseTo(0.55, within(1e-9));
     assertThat(TraitDerivation.stressBaseline("astronauta", 27)).isCloseTo(0.45, within(1e-9));
@@ -66,7 +66,7 @@ class TraitDerivationTest {
   }
 
   @Test
-  @DisplayName("los defaults son apego seguro, comunicación neutra y sin banderas rojas")
+  @DisplayName("defaults are secure attachment, neutral communication and no red flags")
   void defaults() {
     Profile profile =
         new Profile(
@@ -86,7 +86,7 @@ class TraitDerivationTest {
     assertThat(params.activeAddiction()).isFalse();
     assertThat(params.relationshipHistory()).isZero();
     assertThat(params.stressBaseline())
-        .as("cirujana de 34 = alto estrés + franja de presión")
+        .as("34-year-old surgeon = high stress + pressure age range")
         .isCloseTo(0.85, within(1e-9));
   }
 }

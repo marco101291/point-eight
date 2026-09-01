@@ -1,4 +1,4 @@
-"""Router de estado. El contrato real de simulación llega en M2."""
+"""Engine status router."""
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -23,5 +23,5 @@ async def status() -> EngineStatus:
         version=settings.version,
         milestone=settings.milestone,
         collapse_ratio=settings.collapse_ratio,
-        message="El motor está en línea.",
+        message="The engine is online.",
     )

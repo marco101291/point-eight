@@ -11,11 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Las tres transiciones del ciclo de vida. Comparten exactamente la misma coreografía — cargar,
- * transicionar, guardar, publicar — así que se expresa una sola vez y cada operación aporta nada
- * más que el método del aggregate a invocar.
+ * The three lifecycle transitions. They share exactly the same choreography — load, transition,
+ * save, publish — so it's expressed once and each operation contributes nothing more than the
+ * aggregate method to invoke.
  *
- * <p>Las reglas de qué transición es legal no están acá: viven en {@code MatchStatus}.
+ * <p>The rules for which transition is legal don't live here: they live in {@code MatchStatus}.
  */
 @Service
 public class MatchLifecycleUseCases {

@@ -5,7 +5,7 @@ import com.pointeight.shared.domain.DomainEventPublisher;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
-/** Adapter del port de eventos sobre el bus in-process de Spring. En M4 convive con el de AMQP. */
+/** Adapter of the event port on Spring's in-process bus. In M4 it coexists with the AMQP one. */
 @Component
 public class SpringDomainEventPublisher implements DomainEventPublisher {
 

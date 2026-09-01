@@ -11,7 +11,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.Set;
 
-/** Edición de Capa 1 únicamente. No hay forma de tocar la Capa 2 desde afuera. */
+/** Layer 1 editing only. There's no way to touch Layer 2 from the outside. */
 public record UpdateUserRequest(
     @Min(18) @Max(120) int age,
     @NotNull Gender gender,

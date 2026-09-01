@@ -1,1 +1,1 @@
-"""Orquestación de simulaciones: arma agentes, dispara el batch, agrega resultados."""
+"""Simulation orchestration: builds agents, triggers the batch, aggregates results."""

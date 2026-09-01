@@ -5,6 +5,6 @@ import com.pointeight.shared.domain.ResourceNotFoundException;
 public class MatchNotFoundException extends ResourceNotFoundException {
 
   public MatchNotFoundException(MatchId id) {
-    super("No existe el match " + id);
+    super("Match not found: " + id);
   }
 }

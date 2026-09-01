@@ -1,1 +1,1 @@
-"""Agentes, escenarios de conflicto (Strategy) y motor de Markov. Sin dependencias de FastAPI."""
+"""Agents, conflict scenarios (Strategy), and the Markov engine. No FastAPI dependencies."""

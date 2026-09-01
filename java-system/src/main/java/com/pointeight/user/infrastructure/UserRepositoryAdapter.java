@@ -9,7 +9,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
-/** Adapter que implementa el port del dominio sobre Spring Data JPA. */
+/** Adapter that implements the domain port on top of Spring Data JPA. */
 @Component
 public class UserRepositoryAdapter implements UserRepository {
 
@@ -21,7 +21,8 @@ public class UserRepositoryAdapter implements UserRepository {
 
   @Override
   public User save(User user) {
-    // Reusa la fila existente si la hay, para no perder la versión ni duplicar colecciones.
+    // Reuses the existing row if there is one, so it doesn't lose the version or duplicate
+    // collections.
     UserJpaEntity existing = jpa.findById(user.id().value()).orElse(null);
     UserJpaEntity saved = jpa.save(UserJpaMapper.toEntity(user, existing));
     return UserJpaMapper.toDomain(saved);

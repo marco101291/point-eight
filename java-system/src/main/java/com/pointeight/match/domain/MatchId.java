@@ -6,7 +6,7 @@ public record MatchId(UUID value) {
 
   public MatchId {
     if (value == null) {
-      throw new IllegalArgumentException("MatchId no puede ser nulo");
+      throw new IllegalArgumentException("MatchId cannot be null");
     }
   }
 
@@ -18,7 +18,7 @@ public record MatchId(UUID value) {
     try {
       return new MatchId(UUID.fromString(raw));
     } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("MatchId inválido: " + raw);
+      throw new IllegalArgumentException("Invalid MatchId: " + raw);
     }
   }
 

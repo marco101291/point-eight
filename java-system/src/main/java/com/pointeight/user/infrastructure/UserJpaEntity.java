@@ -21,8 +21,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Representación persistente del usuario. Es un detalle de infraestructura: el aggregate {@code
- * User} no sabe que esta clase existe.
+ * Persistent representation of the user. It's an infrastructure detail: the {@code User} aggregate
+ * doesn't know this class exists.
  */
 @Entity
 @Table(name = "users")
@@ -32,7 +32,7 @@ public class UserJpaEntity {
   @Column(name = "id", nullable = false, updatable = false)
   private UUID id;
 
-  // --- Capa 1 ---
+  // --- Layer 1 ---
   @Column(name = "age", nullable = false)
   private int age;
 
@@ -63,7 +63,7 @@ public class UserJpaEntity {
   @Column(name = "hobby", nullable = false)
   private List<String> hobbies = new ArrayList<>();
 
-  // --- Capa 2: nunca sale de acá hacia ningún DTO de respuesta ---
+  // --- Layer 2: never leaves here toward any response DTO ---
   @Enumerated(EnumType.STRING)
   @Column(name = "attachment_style", nullable = false, length = 20)
   private AttachmentStyle attachmentStyle;
@@ -108,7 +108,7 @@ public class UserJpaEntity {
   private Instant updatedAt;
 
   protected UserJpaEntity() {
-    // Requerido por JPA.
+    // Required by JPA.
   }
 
   UserJpaEntity(UUID id) {

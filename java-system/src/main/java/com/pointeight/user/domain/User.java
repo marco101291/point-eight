@@ -5,10 +5,10 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Aggregate root del usuario. POJO puro: no conoce JPA, Spring ni HTTP.
+ * Aggregate root of the user. Pure POJO: knows nothing about JPA, Spring, or HTTP.
  *
- * <p>Mantiene separadas las dos capas del doc: {@link Profile} es visible, {@link
- * SimulationParameters} no sale nunca del Sistema.
+ * <p>Keeps the doc's two layers separate: {@link Profile} is visible, {@link
+ * SimulationParameters} never leaves the System.
  */
 public class User {
 
@@ -37,8 +37,8 @@ public class User {
   }
 
   /**
-   * Alta de un usuario nuevo. Si no se aportan parámetros de Capa 2, el Sistema los deriva del
-   * perfil — el usuario nunca los elige.
+   * Registers a new user. If Layer 2 parameters aren't provided, the System derives them from the
+   * profile — the user never chooses them.
    */
   public static User register(Profile profile, SimulationParameters parameters, Clock clock) {
     Objects.requireNonNull(profile, "profile");
@@ -52,7 +52,7 @@ public class User {
         now);
   }
 
-  /** Rehidratación desde persistencia. Sólo la usa el mapper del adapter. */
+  /** Rehydration from persistence. Only used by the adapter's mapper. */
   public static User rehydrate(
       UserId id,
       Profile profile,
@@ -64,13 +64,13 @@ public class User {
         id, profile, simulationParameters, cumulativeConfidenceScore, createdAt, updatedAt);
   }
 
-  /** Sólo la Capa 1 es editable por el usuario. */
+  /** Only Layer 1 is editable by the user. */
   public void updateProfile(Profile newProfile, Clock clock) {
     this.profile = Objects.requireNonNull(newProfile, "profile");
     this.updatedAt = Instant.now(clock);
   }
 
-  /** La Capa 2 la reajusta el Sistema, nunca el usuario. */
+  /** Layer 2 is recalibrated by the System, never by the user. */
   public void recalibrate(SimulationParameters newParameters, Clock clock) {
     this.simulationParameters = Objects.requireNonNull(newParameters, "simulationParameters");
     this.updatedAt = Instant.now(clock);
@@ -105,7 +105,7 @@ public class User {
     return updatedAt;
   }
 
-  /** Identidad por id, como corresponde a una entidad. */
+  /** Identity by id, as befits an entity. */
   @Override
   public boolean equals(Object other) {
     return other instanceof User user && id.equals(user.id);
@@ -116,7 +116,7 @@ public class User {
     return id.hashCode();
   }
 
-  /** Deliberadamente sin Capa 2: los logs tampoco la filtran. */
+  /** Deliberately without Layer 2: logs don't leak it either. */
   @Override
   public String toString() {
     return "User[id=%s, city=%s, age=%d]".formatted(id, profile.city(), profile.age());

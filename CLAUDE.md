@@ -1,154 +1,158 @@
-# 0.8 (point-eight) — contexto para Claude Code
+# 0.8 (point-eight) — context for Claude Code
 
-Proyecto de **práctica deliberada** de Java + Python. Simulación de matchmaking: un orquestador
-institucional (Java/Spring) asigna matches de forma unilateral, apoyado en un motor de
-compatibilidad (Python/FastAPI) que corre miles de simulaciones Monte Carlo sobre cadenas de Markov
-emocionales. El nombre viene del ratio 0.8:1 positivo:negativo que Gottman/Levenson identificaron
-como señal de riesgo de ruptura.
+Deliberate-practice project in Java + Python. Matchmaking simulation: an institutional orchestrator
+(Java/Spring) unilaterally assigns matches, backed by a compatibility engine (Python/FastAPI) that
+runs thousands of Monte Carlo simulations over emotional Markov chains. The name comes from the
+0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
-Especificación completa: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Decisiones de arquitectura: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-008`).
-
----
-
-## Lo primero que hay que saber
-
-**El objetivo es aprender Java, no entregar rápido.** Marco viene de Next.js/TypeScript; Java y
-Spring son lo nuevo, Next.js no. Eso cambia el criterio de qué es "mejor" código acá: se elige
-deliberadamente el camino **más explícito** por sobre el más corto. Ejemplo concreto: los aggregates
-son POJOs puros con mappers a entidades JPA separadas, aunque sea el doble de código que anotar el
-aggregate directamente (`DEC-004`).
-
-Al explicar código Java, nombrar el patrón y el porqué, no sólo el qué. Ante una bifurcación de
-diseño con valor pedagógico, preguntar en vez de decidir en silencio. No asumir familiaridad con
-idioms de Spring/JPA (inyección por constructor, `@Transactional`, records como Value Objects); sí
-asumirla con React/Next.js.
+Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-010`).
 
 ---
 
-## Estado
+## The first thing to know
 
-| Milestone | Estado | Qué hay |
+**The goal is to learn Java, not to ship fast.** Marco comes from Next.js/TypeScript; Java and
+Spring are the new part, Next.js isn't. That changes the criterion for what counts as "better" code
+here: the deliberately **more explicit** path is chosen over the shorter one. Concrete example: the
+aggregates are pure POJOs with mappers to separate JPA entities, even though it's twice the code of
+annotating the aggregate directly (`DEC-004`).
+
+When explaining Java code, name the pattern and the why, not just the what. When a design fork has
+pedagogical value, ask instead of deciding silently. Don't assume familiarity with Spring/JPA idioms
+(constructor injection, `@Transactional`, records as Value Objects); do assume it with
+React/Next.js.
+
+---
+
+## Status
+
+| Milestone | Status | What's there |
 |---|---|---|
-| **M0** Setup | ✅ | Monorepo, compose (Postgres ×2, RabbitMQ), los 3 servicios en línea |
-| **M1** Dominio Java | ✅ | Aggregates `User`/`Match`, máquina de estados, CRUD, match manual, domain events. 63 tests |
-| **M2** Motor mínimo | ⬜ | FastAPI devuelve score + expiry; Java lo consume por REST síncrono |
-| **M3** Simulación real | ⬜ | Agentes, escenarios Strategy, Markov, `run_batch` con NumPy |
-| **M4** Async + eventos | ⬜ | RabbitMQ, `MatchExpiredEvent` dispara el próximo match, `collapse_probability` |
-| **M5** Admin panel | ⬜ | Spaghetti plot, grafo de Markov, force-directed graph |
-| **M6** Pulido | ⬜ | Tests de motor, migración a Flyway, C4 |
+| **M0** Setup | ✅ | Monorepo, compose (Postgres ×2, RabbitMQ), all 3 services online |
+| **M1** Java domain | ✅ | `User`/`Match` aggregates, state machine, CRUD, manual match, domain events. 63 tests |
+| **M2** Minimal engine | ✅ | FastAPI exposes `POST /api/v1/compatibility` (random score + expiry, envelope with `modelVersion`); Java consumes it via `RestClient` at `POST /api/matches/{id}/score`. 73 tests |
+| **M3** Real simulation | ⬜ | Agents, Strategy scenarios, Markov, `run_batch` with NumPy |
+| **M4** Async + events | ⬜ | RabbitMQ, `MatchExpiredEvent` triggers the next match, `collapse_probability` |
+| **M5** Admin panel | ⬜ | Spaghetti plot, Markov graph, force-directed graph |
+| **M6** Polish | ⬜ | Engine tests, migration to Flyway, C4 |
 
-Inventario: 59 archivos Java (main), 6 de test, 7 Python, 3 TS.
+Inventory: 59 Java files (main), 6 test, 7 Python, 3 TS (before M2).
 
-**El Motor de Python es sólo un esqueleto**: levanta y responde `/api/status`, sin agentes ni
-simulación. **El admin panel es sólo un semáforo**: consulta si los dos servicios responden, no lee
-usuarios ni matches. `Match.compatibilityScore` siempre vale `null` hasta M2.
+**The Python Engine still doesn't simulate anything**: `POST /api/v1/compatibility` validates the
+envelope and returns a random score + expiry; there are no agents, scenarios, or Markov until M3.
+**The admin panel is just a traffic light**: it checks whether the two services respond, it doesn't
+read users or matches. `Match.compatibilityScore` can already have a real value (requested by hand
+via `POST /api/matches/{id}/score`), but nothing triggers it automatically yet — that lands in M4
+with `MatchAssignedEvent`.
 
 ---
 
-## Entorno — leer antes de sugerir comandos
+## Environment — read before suggesting commands
 
-- **No hay JDK ni Gradle instalados.** Todo build y test de Java corre en contenedor. Usar
-  `./scripts/java-test.sh`; **no** sugerir `gradle` ni `./gradlew` directo. El script pasa
-  `--user $(id -u):$(id -g)` porque el contenedor de Gradle, sin eso, deja `build/` y `.gradle/`
-  como root y rompe los borrados posteriores.
-- **Los puertos publicados salen de `.env`**, y varios no están en el valor "obvio" porque chocaban
-  con otros proyectos que corren en la misma máquina (`alivia-postgres` ocupa 5434, un `next-server`
-  ocupa 3000). Quedaron: Sistema **8080**, Motor **8000**, panel **3001**, Postgres Sistema **5433**,
-  Postgres Motor **5435**, RabbitMQ **5672** / **15672**.
-- **El doc de especificación y el código difieren a propósito** en el naming: el doc usa nombres
-  provisionales (`hang-the-dj-sim`, `com.system`) y difiere el renombre a M1; se adoptó
-  `point-eight` / `com.pointeight` desde M0 (`DEC-001`).
-- `.env` no está versionado. Copiar de `.env.example` antes de levantar.
+- **No JDK or Gradle installed.** All Java build and test runs in a container. Use
+  `./scripts/java-test.sh`; **don't** suggest `gradle` or `./gradlew` directly. The script passes
+  `--user $(id -u):$(id -g)` because, without that, the Gradle container leaves `build/` and
+  `.gradle/` owned by root and breaks later deletions.
+- **Published ports come from `.env`**, and several aren't at the "obvious" value because they
+  clashed with other projects running on the same machine (`alivia-postgres` occupies 5434, a
+  `next-server` occupies 3000). They ended up as: System **8080**, Engine **8000**, panel **3001**,
+  System Postgres **5433**, Engine Postgres **5435**, RabbitMQ **5672** / **15672**.
+- **The spec doc and the code deliberately differ** in naming: the doc uses provisional names
+  (`hang-the-dj-sim`, `com.system`) and defers the rename to M1; `point-eight` / `com.pointeight`
+  was adopted from M0 on (`DEC-001`).
+- `.env` isn't version-controlled. Copy it from `.env.example` before starting the stack.
 
 ```bash
-docker compose up -d --build     # levantar los 6 servicios
-docker compose down -v           # bajar y borrar las bases
-./scripts/java-test.sh           # 63 tests, sin Spring ni Postgres
+docker compose up -d --build     # bring up all 6 services
+docker compose down -v           # tear down and drop the databases
+./scripts/java-test.sh           # 63 tests, no Spring or Postgres
 ```
 
 ---
 
-## Reglas de arquitectura
+## Architecture rules
 
-### La regla de dependencias
+### The dependency rule
 
-Package-by-feature en el primer nivel (`user/`, `match/`, `shared/`, `config/`), Ports & Adapters
-adentro de cada uno:
+Package-by-feature at the top level (`user/`, `match/`, `shared/`, `config/`), Ports & Adapters
+inside each one:
 
 ```
-infrastructure/  ──>  application/  ──>  domain/       nunca al revés
+infrastructure/  ──>  application/  ──>  domain/       never the other way around
 ```
 
-`domain/` es **Java puro**: ni una línea de Spring ni de JPA. Es verificable, y si alguna vez
-devuelve algo, la arquitectura se rompió:
+`domain/` is **pure Java**: not a single line of Spring or JPA. It's verifiable, and if this ever
+returns something, the architecture is broken:
 
 ```bash
 grep -rl "jakarta.persistence\|org.springframework" \
   java-system/src/main --include=*.java | grep "/domain/"
 ```
 
-Los ports (interfaces de repositorio) viven en `domain/`, **no** en `infrastructure/`: el dominio
-declara qué necesita y la infraestructura se adapta.
+Ports (repository interfaces) live in `domain/`, **not** in `infrastructure/`: the domain declares
+what it needs and the infrastructure adapts to it.
 
-### El invariante que no se negocia: la Capa 2
+### The non-negotiable invariant: Layer 2
 
-El `User` tiene dos capas. **Capa 1** (`Profile`) es visible y editable: edad, género, ciudad,
-profesión, hobbies. **Capa 2** (`SimulationParameters`) es write-only: estilo de apego, pesos hacia
-los cuatro jinetes de Gottman, historial de infidelidad, adicción activa, estrés basal. **Entra por
-la API y no sale nunca en ninguna respuesta.**
+`User` has two layers. **Layer 1** (`Profile`) is visible and editable: age, gender, city,
+profession, hobbies. **Layer 2** (`SimulationParameters`) is write-only: attachment style, weights
+toward Gottman's four horsemen, infidelity history, active addiction, baseline stress. **It comes in
+through the API and never goes out in any response.**
 
-La garantía es estructural, no una lista de exclusiones: `UserResponse` es un record que sólo
-declara campos de Capa 1, así que los parámetros ocultos no tienen dónde entrar. Al agregar
-endpoints o DTOs, **mantener esa propiedad** — nunca serializar `SimulationParameters`. `User.toString()`
-también la omite a propósito, para que no se filtre por los logs.
+The guarantee is structural, not a list of exclusions: `UserResponse` is a record that only declares
+Layer 1 fields, so the hidden parameters have nowhere to enter. When adding endpoints or DTOs,
+**preserve that property** — never serialize `SimulationParameters`. `User.toString()` also omits it
+on purpose, so it doesn't leak through the logs.
 
-Es el centro narrativo del proyecto: el usuario no puede ver ni corregir el modelo que el Sistema
-tiene de él.
+It's the narrative center of the project: the user can't see or correct the model the System has of
+them.
 
-### Otras invariantes vigentes
+### Other invariants in force
 
-- Un match no puede matchear a alguien consigo mismo, ni tener `expiryDuration` ≤ 0.
-- Toda la tabla de transiciones vive en `MatchStatus`; el aggregate la consulta antes de mutar.
-  `EXPIRED` y `REJECTED` son terminales.
-- Un usuario tiene como máximo **un match abierto** (`PENDING` o `ACTIVE`) — `DEC-007`.
-- El dominio nunca llama a `Instant.now()`: recibe un `Clock` inyectado, para que los vencimientos
-  se testeen con reloj fijo.
-
----
-
-## Estilo de código
-
-**Java** — Google Java Style, indent 2 espacios, límite 100 columnas. `record` para Value Objects,
-con validación en el compact constructor. Inyección por constructor (nunca `@Autowired` en campos).
-Excepciones de dominio extienden `DomainException`; el `GlobalExceptionHandler` las traduce a
-`ProblemDetail` (404 / 409 / 400).
-
-**Python** — PEP 8, type hints obligatorios, `black` (line-length 100), `mypy --strict`, Pydantic
-como contrato de entrada/salida.
-
-**Commits** — Conventional commits con scope por servicio: `feat(java-system): add match state
-machine`. Un PR por milestone o sub-tarea; **nunca mezclar `java-system` y `python-engine` en el
-mismo PR**.
-
-Comentarios y documentación del proyecto **en español**. Los identificadores de código, en inglés.
+- A match can't match someone with themselves, nor have `expiryDuration` ≤ 0.
+- The whole transition table lives in `MatchStatus`; the aggregate consults it before mutating.
+  `EXPIRED` and `REJECTED` are terminal.
+- A user has at most **one open match** (`PENDING` or `ACTIVE`) — `DEC-007`.
+- The domain never calls `Instant.now()`: it receives an injected `Clock`, so expirations can be
+  tested with a fixed clock.
 
 ---
 
-## Trampas que ya costaron tiempo
+## Code style
 
-- **`next.config.ts` no debe declarar un bloque `env`.** Ese bloque *inlinea* los valores en build
-  time, así que hornea las URLs de desarrollo en la imagen y el panel muestra los servicios caídos
-  aunque respondan. Las URLs de servicio se leen del entorno en runtime, dentro del server component.
-- **El schema lo genera Hibernate** (`ddl-auto: update`, `DEC-008`). No hay migraciones; se migra a
-  Flyway en M6. Al cambiar entidades, no escribir SQL a mano.
-- **`seekingGenders` es un `Set<Gender>`**, aunque el doc lo escriba en singular (`DEC-005`).
+**Java** — Google Java Style, 2-space indent, 100-column limit. `record` for Value Objects, with
+validation in the compact constructor. Constructor injection (never field `@Autowired`). Domain
+exceptions extend `DomainException`; `GlobalExceptionHandler` translates them to `ProblemDetail`
+(404 / 409 / 400).
+
+**Python** — PEP 8, type hints required, `black` (line-length 100), `mypy --strict`, Pydantic as the
+input/output contract.
+
+**Commits** — Conventional commits scoped per service: `feat(java-system): add match state
+machine`. One PR per milestone or sub-task; **never mix `java-system` and `python-engine`** in the
+same PR.
+
+Code comments and documentation **in English**. Code identifiers, in English.
 
 ---
 
-## Pendiente de decidir
+## Traps that already cost time
 
-Registrado al final de `docs/architecture.md`. Lo más relevante para los próximos milestones:
-formato del payload Java → Python (M2), si el Motor mantiene réplica de perfiles o los recibe en el
-payload (M4), persistencia de `SimulationRun` (M3), quién dispara `activate` sobre un match
-`PENDING`, y cómo se ajusta el `cumulativeConfidenceScore` (hoy existe pero nunca se mueve).
+- **`next.config.ts` must not declare an `env` block.** That block *inlines* the values at build
+  time, so it bakes the development URLs into the image and the panel shows the services as down
+  even when they're responding. Service URLs are read from the environment at runtime, inside the
+  server component.
+- **Hibernate generates the schema** (`ddl-auto: update`, `DEC-008`). There are no migrations yet;
+  it migrates to Flyway in M6. When changing entities, don't write SQL by hand.
+- **`seekingGenders` is a `Set<Gender>`**, even though the doc writes it in the singular (`DEC-005`).
+
+---
+
+## Pending decisions
+
+Recorded at the end of `docs/architecture.md`. Most relevant for the upcoming milestones: whether
+the Engine keeps a replica of profiles or receives them in the payload (M4), `SimulationRun`
+persistence (M3), who triggers `activate` on a `PENDING` match, and how `cumulativeConfidenceScore`
+gets adjusted (it exists today but never moves). The Java → Python payload format was resolved in
+M2 as `DEC-009`.

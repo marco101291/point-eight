@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Adapter de entrada HTTP del aggregate User. Traduce a casos de uso, sin lógica propia. */
+/** Inbound HTTP adapter for the User aggregate. Translates to use cases, no logic of its own. */
 @RestController
 @RequestMapping("/api/users")
 public class UserController {

@@ -5,8 +5,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * El dominio nunca llama a {@code Instant.now()} directamente: recibe un {@link Clock}. Eso permite
- * testear vencimientos con un reloj fijo, sin dormir el test.
+ * The domain never calls {@code Instant.now()} directly: it receives a {@link Clock}. That lets
+ * expirations be tested with a fixed clock, without sleeping the test.
  */
 @Configuration
 public class ClockConfig {

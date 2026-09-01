@@ -8,7 +8,7 @@ import java.time.Clock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Alta de usuario. Si no llega Capa 2, el Sistema la deriva del perfil. */
+/** User registration. If Layer 2 isn't provided, the System derives it from the profile. */
 @Service
 public class RegisterUserUseCase {
 

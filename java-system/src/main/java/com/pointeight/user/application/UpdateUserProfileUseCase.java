@@ -9,7 +9,7 @@ import java.time.Clock;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Edición de Capa 1. La Capa 2 no se toca por esta vía: el usuario no la controla. */
+/** Layer 1 editing. Layer 2 isn't touched through this path: the user doesn't control it. */
 @Service
 public class UpdateUserProfileUseCase {
 

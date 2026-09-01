@@ -2,12 +2,12 @@ package com.pointeight.user.domain;
 
 import java.util.UUID;
 
-/** Identidad del aggregate User. */
+/** Identity of the User aggregate. */
 public record UserId(UUID value) {
 
   public UserId {
     if (value == null) {
-      throw new IllegalArgumentException("UserId no puede ser nulo");
+      throw new IllegalArgumentException("UserId cannot be null");
     }
   }
 
@@ -19,7 +19,7 @@ public record UserId(UUID value) {
     try {
       return new UserId(UUID.fromString(raw));
     } catch (IllegalArgumentException e) {
-      throw new IllegalArgumentException("UserId inválido: " + raw);
+      throw new IllegalArgumentException("Invalid UserId: " + raw);
     }
   }
 

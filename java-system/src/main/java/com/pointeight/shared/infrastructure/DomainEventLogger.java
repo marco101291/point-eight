@@ -7,8 +7,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Deja rastro de cada evento de dominio en el log. En M1 es la única forma de ver la máquina de
- * estados moviéndose; en M4 el listener real que dispara el siguiente match vive al lado de este.
+ * Leaves a trace of every domain event in the log. In M1 it's the only way to see the state
+ * machine moving; in M4 the real listener that triggers the next match lives next to this one.
  */
 @Component
 public class DomainEventLogger {
@@ -17,6 +17,6 @@ public class DomainEventLogger {
 
   @EventListener
   public void on(DomainEvent event) {
-    log.info("[evento] {} :: {}", event.getClass().getSimpleName(), event);
+    log.info("[event] {} :: {}", event.getClass().getSimpleName(), event);
   }
 }
