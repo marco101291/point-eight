@@ -6,7 +6,7 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-010`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-013`).
 
 ---
 
@@ -32,15 +32,17 @@ React/Next.js.
 | **M0** Setup | ✅ | Monorepo, compose (Postgres ×2, RabbitMQ), all 3 services online |
 | **M1** Java domain | ✅ | `User`/`Match` aggregates, state machine, CRUD, manual match, domain events. 63 tests |
 | **M2** Minimal engine | ✅ | FastAPI exposes `POST /api/v1/compatibility` (random score + expiry, envelope with `modelVersion`); Java consumes it via `RestClient` at `POST /api/matches/{id}/score`. 73 tests |
-| **M3** Real simulation | ⬜ | Agents, Strategy scenarios, Markov, `run_batch` with NumPy |
+| **M3** Real simulation | ✅ | `Agent`, 5 Strategy scenarios, discrete Markov states (`EmotionalState`) + `RelationshipState`, `run_batch` (plain loop, not vectorized — `DEC-012`). 30 new Python tests |
 | **M4** Async + events | ⬜ | RabbitMQ, `MatchExpiredEvent` triggers the next match, `collapse_probability` |
 | **M5** Admin panel | ⬜ | Spaghetti plot, Markov graph, force-directed graph |
 | **M6** Polish | ⬜ | Engine tests, migration to Flyway, C4 |
 
 Inventory: 59 Java files (main), 6 test, 7 Python, 3 TS (before M2).
 
-**The Python Engine still doesn't simulate anything**: `POST /api/v1/compatibility` validates the
-envelope and returns a random score + expiry; there are no agents, scenarios, or Markov until M3.
+**The Python Engine now runs a real simulation**, but `POST /api/v1/compatibility` still answers
+Java with `modelVersion: "v0"` — bumping it to `"v1"` needs a matching one-line change in
+`EngineCompatibilityClient` (`DEC-013`), deliberately left for its own java-system commit. Nothing
+persists a `SimulationRun` yet; `evaluate()` computes and returns the report in the same request.
 **The admin panel is just a traffic light**: it checks whether the two services respond, it doesn't
 read users or matches. `Match.compatibilityScore` can already have a real value (requested by hand
 via `POST /api/matches/{id}/score`), but nothing triggers it automatically yet — that lands in M4
