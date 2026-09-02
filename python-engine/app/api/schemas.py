@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
-class _CamelModel(BaseModel):
+class CamelModel(BaseModel):
     """All payloads travel in camelCase, to match Java's records as-is."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -40,7 +40,7 @@ class AttachmentStyle(str, Enum):
     DISORGANIZED = "DISORGANIZED"
 
 
-class Profile(_CamelModel):
+class Profile(CamelModel):
     """Layer 1: mirror of `com.pointeight.user.domain.Profile`."""
 
     age: int
@@ -52,14 +52,14 @@ class Profile(_CamelModel):
     hobbies: list[str] = Field(default_factory=list)
 
 
-class CommunicationProfile(_CamelModel):
+class CommunicationProfile(CamelModel):
     criticism: float = Field(ge=0.0, le=1.0)
     contempt: float = Field(ge=0.0, le=1.0)
     defensiveness: float = Field(ge=0.0, le=1.0)
     stonewalling: float = Field(ge=0.0, le=1.0)
 
 
-class SimulationParameters(_CamelModel):
+class SimulationParameters(CamelModel):
     """Layer 2: mirror of `com.pointeight.user.domain.SimulationParameters`.
 
     This is the only channel through which Layer 2 leaves the System — never in an HTTP response
@@ -76,7 +76,7 @@ class SimulationParameters(_CamelModel):
     commitment_pace_expectation: float = Field(ge=0.0, le=1.0)
 
 
-class AgentPayload(_CamelModel):
+class AgentPayload(CamelModel):
     """One side of the request. Named `AgentPayload`, not `Agent`, to stay distinct from
     `app.domain.agent.Agent` — this is wire data, that one has behavior."""
 
@@ -84,13 +84,13 @@ class AgentPayload(_CamelModel):
     simulation_parameters: SimulationParameters
 
 
-class CompatibilityRequest(_CamelModel):
+class CompatibilityRequest(CamelModel):
     model_version: str
     agent_a: AgentPayload
     agent_b: AgentPayload
 
 
-class CompatibilityResponse(_CamelModel):
+class CompatibilityResponse(CamelModel):
     model_version: str
     compatibility_score: float
     expiry_days: int

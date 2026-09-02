@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.compatibility import router as compatibility_router
+from app.api.insights import router as insights_router
 from app.api.status import router as status_router
 from app.config import settings
 from app.messaging import CompatibilityScoreConsumer
@@ -32,6 +33,7 @@ app = FastAPI(
 
 app.include_router(status_router)
 app.include_router(compatibility_router)
+app.include_router(insights_router)
 
 
 @app.get("/health")
