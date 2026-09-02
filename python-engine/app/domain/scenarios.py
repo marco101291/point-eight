@@ -9,7 +9,7 @@ difference is that it's no longer the caller's job to know how.
 from __future__ import annotations
 
 import random
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 
 from app.domain.agent import Agent
@@ -54,17 +54,23 @@ class Scenario(ABC):
         return ScenarioOutcome(state=new_state, reaction_a=reaction_a, reaction_b=reaction_b)
 
 
+# Both conflict scenarios below get a low `stable`/`repairing` affinity, not just a high `tense`/
+# `hostile` one: a real healthy couple doesn't hit a trust crisis or a money fight every other
+# week. Without this, MoneyConflict/TrustBreach occurred often enough even for a low-negativity
+# pair that no simulation could sustain a good enough Gottman ratio (`app/domain/gottman.py`) to
+# ever approach STABLE_RATIO — every pair converged toward the same mediocre survival odds
+# regardless of how compatible the agents actually were, which defeats the point of the score.
 class MoneyConflict(Scenario):
     base_negative = 0.55
     base_positive = 0.15
-    affinity_by_state = {"tense": 1.4, "hostile": 1.3}
+    affinity_by_state = {"tense": 1.4, "hostile": 1.3, "stable": 0.2, "repairing": 0.3}
 
 
 class TrustBreach(Scenario):
     base_negative = 0.80
     base_positive = 0.05
     is_trust_breach = True
-    affinity_by_state = {"tense": 1.2, "hostile": 1.5}
+    affinity_by_state = {"tense": 1.2, "hostile": 1.5, "stable": 0.1, "repairing": 0.2}
 
 
 class ExternalCrisis(Scenario):
@@ -87,6 +93,13 @@ class NeedForSpace(Scenario):
     affinity_by_state = {"tense": 1.3}
 
 
+# Exponential-moving-average decay for recent_positive/recent_negative (see RelationshipState's
+# docstring for why it's an EMA, not a running total). 0.85 gives an effective memory of about
+# 1 / (1 - 0.85) ≈ 6-7 scenarios — long enough to smooth out one bad day, short enough to actually
+# recover from a rough patch instead of dragging the ratio down forever.
+_RATIO_MEMORY = 0.85
+
+
 def update_state(
     state: RelationshipState, reaction_a: Reaction, reaction_b: Reaction, rng: random.Random
 ) -> RelationshipState:
@@ -103,11 +116,16 @@ def update_state(
     positivity = net_positive - net_negative
     emotional_state = advance_emotional_state(state.emotional_state, positivity, rng)
 
+    recent_positive = _RATIO_MEMORY * state.recent_positive + (1 - _RATIO_MEMORY) * net_positive
+    recent_negative = _RATIO_MEMORY * state.recent_negative + (1 - _RATIO_MEMORY) * net_negative
+
     return RelationshipState(
         trust=trust,
         resentment=resentment,
         satisfaction=satisfaction,
         emotional_state=emotional_state,
+        recent_positive=recent_positive,
+        recent_negative=recent_negative,
     )
 
 

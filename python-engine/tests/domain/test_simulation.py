@@ -1,5 +1,8 @@
 import random
 
+import pytest
+
+from app.domain import simulation as simulation_module
 from app.domain.agent import Agent, AttachmentStyle, CommunicationProfile
 from app.domain.simulation import MAX_DAYS, run_batch, run_simulation
 
@@ -53,3 +56,17 @@ def test_run_batch_returns_one_expiry_per_simulation() -> None:
     assert len(report.expiry_distribution) == 50
     assert 0.0 <= report.compatibility_score <= 1.0
     assert all(0 <= day <= MAX_DAYS for day in report.expiry_distribution)
+
+
+def test_a_bad_ratio_alone_can_collapse_a_simulation_that_never_reaches_hostile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Forces collapse_probability to certainty, regardless of the discrete EmotionalState, to
+    verify the ratio-based path (DEC in docs/architecture.md, M4) actually ends the simulation on
+    its own — not just alongside the Markov chain reaching COLLAPSED."""
+    monkeypatch.setattr(simulation_module, "collapse_probability", lambda _ratio: 1.0)
+
+    result = run_simulation(stable_agent(), stable_agent(), rng=random.Random(4))
+
+    assert result.outcome == "collapsed"
+    assert result.final_state.emotional_state.value != "collapsed"
