@@ -206,13 +206,41 @@ Neither side validates `modelVersion` on the async path the way the REST router 
 `build_response_payload` calls `evaluate()` directly, which never checked the version to begin with
 (only `app/api/compatibility.py`'s router did). Noted as a gap, not fixed here: see Open questions.
 
+### DEC-017 — `SimulationRun` persistence: SQLAlchemy over psycopg3, three tables split by granularity
+Resolves the open question from M3: SQLAlchemy (async, over psycopg3 — the same `postgresql+psycopg://`
+URL scheme works for both sync and async engines, confirmed against the real `postgres-engine`), not
+raw SQL, for the same reason Java uses Hibernate/JPA instead of hand-written queries — and it's the
+same pedagogical parallel the project already draws between the two services' persistence layers.
+
+The schema is split across `simulation_runs` / `simulation_trajectories` / `simulation_transitions`
+instead of one wide table because M5's two data-hungry views need very different granularity from
+the same batch: the spaghetti plot needs a handful of *full* day-by-day trajectories (expensive, so
+only the first `DEFAULT_SAMPLE_SIZE` — 50 — simulations get one), the Markov graph needs *aggregated
+counts* across the whole batch (cheap, so every simulation contributes, not just the sampled ones).
+
+Capturing that data required instrumenting `run_simulation`/`run_batch` with an optional
+`SimulationObserver` (a `Protocol`, `app/domain/simulation.py`) that gets narrated each day's state
+and each simulation's outcome — the domain stays free of persistence concerns; it doesn't know or
+care whether anyone's listening. `SamplingRecorder` (`app/services/simulation_recording.py`) is the
+only implementation, and defaults each simulation's "previous" emotional state to `STABLE` (matching
+`RelationshipState.initial()`) so **self-loops get counted as transitions too** — without that, the
+empirical matrix would be missing its dominant weights entirely, since staying put (not changing) is
+most of what a `0.97` self-loop (DEC-015) actually produces. Verified against real containers: a real
+score request produced 50 sampled trajectories and 13 distinct observed transitions dominated by
+`stable -> stable` (88,045 of ~96,000) — the recalibrated matrix behaving as intended, not just in
+the unit tests.
+
+Only the AMQP path (a real match's score request) persists a run. The REST endpoint
+(`POST /api/v1/compatibility`, kept per DEC-016 as a broker-free way to exercise the Engine directly)
+does not — its calls aren't tied to a real match, and persisting them would just be test noise in
+the tables M5's admin panel reads from. `services/compatibility.evaluate()` now returns an
+`Evaluation` bundling the wire response with the recorder; the REST endpoint takes `.response` and
+discards the rest.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
   does the engine keep its own event-fed replica? To be defined in M4.
-- Persistence in `python-engine`: SQLAlchemy vs. direct psycopg for `SimulationRun`. M3 added the
-  engine that produces a `CompatibilityReport`, but nothing persists it yet — `evaluate()` computes
-  and returns it in the same request. Still open.
 - Bump `modelVersion` to `"v1"` on the java-system side (DEC-013) — and once it's bumped, decide
   whether `modelVersion` should be validated on the AMQP path too, not just the REST one (DEC-016).
 - Who triggers `activate` on a `PENDING` match: today it's manual. The scheduler should either

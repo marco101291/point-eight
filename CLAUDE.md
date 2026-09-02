@@ -6,7 +6,7 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-016`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-017`).
 
 ---
 
@@ -41,10 +41,12 @@ Inventory: 59 Java files (main), 6 test, 7 Python, 3 TS (before M2).
 
 **The Python Engine runs a real simulation**, but the wire contract still says
 `modelVersion: "v0"` — bumping it to `"v1"` needs a matching one-line change in
-`AmqpCompatibilityEngineClient` (`DEC-013`), still an open follow-up. Nothing persists a
-`SimulationRun` yet; `evaluate()` computes and returns the report in the same call.
+`AmqpCompatibilityEngineClient` (`DEC-013`), still an open follow-up. Every AMQP-triggered score
+request now persists a `SimulationRun` (`DEC-017`, SQLAlchemy over psycopg3): the run itself, a
+50-simulation sample of full day-by-day trajectories, and observed state-transition counts across
+the whole batch — the data M5's spaghetti plot and "learned" Markov graph read from.
 **The admin panel is still just a traffic light**: it checks whether the two services respond, it
-doesn't read users or matches — that's M5.
+doesn't read users or matches — that's the rest of M5, in progress.
 
 **Scoring is asynchronous now**: `POST /api/matches/{id}/score` returns `202 Accepted` and publishes
 the request over RabbitMQ; the score lands moments later via a separate response queue
@@ -159,7 +161,7 @@ Code comments and documentation **in English**. Code identifiers, in English.
 ## Pending decisions
 
 Recorded at the end of `docs/architecture.md`. Most relevant for the upcoming milestones: whether
-the Engine keeps a replica of profiles or receives them in the payload (M4), `SimulationRun`
-persistence (M3), who triggers `activate` on a `PENDING` match, and how `cumulativeConfidenceScore`
-gets adjusted (it exists today but never moves). The Java → Python payload format was resolved in
-M2 as `DEC-009`.
+the Engine keeps a replica of profiles or receives them in the payload (M4), who triggers
+`activate` on a `PENDING` match, and how `cumulativeConfidenceScore` gets adjusted (it exists today
+but never moves). The Java → Python payload format was resolved in M2 as `DEC-009`; `SimulationRun`
+persistence was resolved in M5 as `DEC-017`.
