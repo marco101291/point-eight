@@ -100,12 +100,55 @@ force anyone to know about the concrete HTTP client; `GlobalExceptionHandler` ma
 `Match.expiryDuration` — that field is `final` and today the System sets it when the match is
 created, not the Engine. Reconciling the two values is left open for when M3 produces a real score.
 
+### DEC-011 — A discrete Markov layer on top of the continuous state, and `Scenario.resolve()` as the Strategy contract
+Section 4's pseudocode only carries `RelationshipState(trust, resentment, satisfaction)` and
+checks `resentment >= COLLAPSE_THRESHOLD` to end a simulation. M3 adds `EmotionalState` (`STABLE`,
+`TENSE`, `REPAIRING`, `HOSTILE`, `COLLAPSED`) with a hand-authored transition table
+(`app/domain/state.py`), and ends a simulation when `emotional_state is COLLAPSED` — the chain's
+absorbing state — instead of the separate scalar threshold. The alternative (keep only the
+continuous state, add the discrete layer in M5 when the admin panel actually needs to draw it)
+was rejected: M5's "Markov graph" view needs real states and transition probabilities to plot, and
+retrofitting them after the engine already has callers would mean redoing `update_state`'s
+contract later instead of getting it right once.
+
+The Strategy contract follows section 8's `Scenario.resolve(state, agent_a, agent_b)` convention
+(for the future `gottman-scenario-writer` skill) rather than section 4's looser
+`agent.react(scenario, state)` + free `update_state(...)`. Each `Scenario.resolve()` still calls
+`agent.react()` and `update_state()` internally — the difference is that the caller
+(`run_simulation`) only ever sees "give me state + two agents, get back the new state", not the
+two-step pseudocode. `resolve()` also takes an explicit `rng: random.Random`, which neither section
+mentions — needed so `run_batch` can reuse one seeded generator across simulations instead of the
+domain silently reaching for global randomness.
+
+### DEC-012 — `run_batch` stays a plain Python loop; `default_simulations` drops from 10,000 to 1,000
+Section 2 asks for NumPy to "vectorize the batch". A real vectorized version would represent all N
+simulations as arrays (trust/resentment/satisfaction per simulation, a boolean mask for who's
+already collapsed) and step every "day" for all of them at once — correct, but a substantially
+bigger rewrite of `Agent`/`Scenario` to operate on arrays instead of one state at a time. For M3,
+correctness and testability mattered more than throughput, so `run_batch` is the pseudocode's
+literal `[run_simulation(...) for _ in range(n)]`.
+
+The cost is real: 10,000 sequential simulations measured ~8.5s locally, which is too slow for a
+synchronous request from Java (still true until M4's RabbitMQ decouples them). `default_simulations`
+drops to 1,000 (~0.85s) so the existing `POST /api/matches/{id}/score` flow doesn't risk a
+client-side timeout. NumPy vectorization is left as a concrete, well-scoped follow-up rather than
+done speculatively now.
+
+### DEC-013 — `modelVersion` stays "v0" for now, even though the model is real
+M3 replaces the M2 random stub with the actual engine, which is exactly the scenario DEC-009's
+envelope was built for — bumping `modelVersion` to `"v1"` would make that traceable. It isn't
+bumped in this change: Java's `EngineCompatibilityClient` still sends `"v0"`, and this branch is
+scoped to `python-engine` only (never mix `java-system` and `python-engine` in one PR/branch). The
+bump is a deliberate, separate one-line java-system follow-up.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
   does the engine keep its own event-fed replica? To be defined in M4.
-- Persistence in `python-engine`: SQLAlchemy vs. direct psycopg for `SimulationRun`. To be defined
-  in M3.
+- Persistence in `python-engine`: SQLAlchemy vs. direct psycopg for `SimulationRun`. M3 added the
+  engine that produces a `CompatibilityReport`, but nothing persists it yet — `evaluate()` computes
+  and returns it in the same request. Still open.
+- Bump `EngineCompatibilityClient`'s `modelVersion` to `"v1"` on the java-system side (DEC-013).
 - Who triggers `activate` on a `PENDING` match: today it's manual. In M4 the scheduler should either
   activate it as soon as it's assigned, or leave `PENDING` as a preparation window with its own
   timeout.
