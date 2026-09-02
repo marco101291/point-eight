@@ -50,7 +50,6 @@ def test_response_carries_the_same_match_id_as_the_request() -> None:
 
     outcome = build_response_payload(payload)
 
-    assert outcome.match_id == payload["matchId"]
     assert outcome.reply_payload["matchId"] == payload["matchId"]
     assert outcome.reply_payload["modelVersion"] == "v0"
     assert 0.0 <= outcome.reply_payload["compatibilityScore"] <= 1.0

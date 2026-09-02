@@ -31,6 +31,7 @@ class SimulationRun(Base):
     model_version: Mapped[str] = mapped_column(String(16))
     n_simulations: Mapped[int]
     compatibility_score: Mapped[float]
+    expiry_days: Mapped[int]
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     trajectories: Mapped[list["SimulationTrajectory"]] = relationship(
@@ -53,7 +54,8 @@ class SimulationTrajectory(Base):
     simulation_index: Mapped[int]
     outcome: Mapped[str] = mapped_column(String(16))
     expiry_day: Mapped[int]
-    # [{"day": 0, "trust": 0.6, "resentment": 0.0, "satisfaction": 0.5, "emotionalState": "stable"}, ...]
+    # [{"day": 0, "trust": 0.6, "resentment": 0.0, "satisfaction": 0.5,
+    #   "emotionalState": "stable"}, ...]
     points: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
 
     run: Mapped["SimulationRun"] = relationship(back_populates="trajectories")

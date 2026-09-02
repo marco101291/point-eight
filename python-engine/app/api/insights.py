@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator, Iterable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -43,15 +43,14 @@ def build_markov_graph(counts: Iterable[tuple[str, str, int]]) -> MarkovGraph:
     table in `app/domain/state.py`.
 
     Takes plain triples rather than ORM rows so it's testable without a database — the endpoint
-    below is the only thing that knows `SimulationTransition` exists.
+    below is the only thing that knows `SimulationTransition` exists. One pass is enough: each
+    triple updates both the pair total and its source-state total at once.
     """
     aggregated: dict[tuple[str, str], int] = {}
+    totals_by_source: dict[str, int] = {}
     for from_state, to_state, count in counts:
         key = (from_state, to_state)
         aggregated[key] = aggregated.get(key, 0) + count
-
-    totals_by_source: dict[str, int] = {}
-    for (from_state, _), count in aggregated.items():
         totals_by_source[from_state] = totals_by_source.get(from_state, 0) + count
 
     transitions = [
@@ -74,9 +73,16 @@ def build_markov_graph(counts: Iterable[tuple[str, str, int]]) -> MarkovGraph:
 
 @router.get("/markov-graph", response_model=MarkovGraph)
 async def markov_graph(session: AsyncSession = Depends(get_db_session)) -> MarkovGraph:
-    result = await session.execute(select(SimulationTransition))
-    rows = result.scalars().all()
-    return build_markov_graph((row.from_state, row.to_state, row.count) for row in rows)
+    """Sums in SQL, not in Python: `simulation_transitions` grows with every scored match and
+    never gets pruned, so this stays a handful of rows regardless of how much history there is,
+    instead of pulling the whole table over the wire on every page load."""
+    stmt = select(
+        SimulationTransition.from_state,
+        SimulationTransition.to_state,
+        func.sum(SimulationTransition.count).label("count"),
+    ).group_by(SimulationTransition.from_state, SimulationTransition.to_state)
+    result = await session.execute(stmt)
+    return build_markov_graph(tuple(row) for row in result.all())
 
 
 class Trajectory(CamelModel):

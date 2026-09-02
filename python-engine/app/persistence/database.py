@@ -13,8 +13,9 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def init_models() -> None:
-    """Creates tables if they don't exist yet — mirrors java-system's `ddl-auto: update` (DEC-008):
-    no migrations until M6, the model still moves too much to justify hand-written ones."""
+    """Creates tables if they don't exist yet — mirrors java-system's `ddl-auto: update`
+    (DEC-008): no migrations until M6, the model still moves too much to justify hand-written
+    ones."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

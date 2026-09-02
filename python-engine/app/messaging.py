@@ -40,10 +40,10 @@ class CompatibilityScoreRequestMessage(CompatibilityRequest):
 @dataclass(frozen=True)
 class RequestOutcome:
     """Everything the AMQP callback needs after processing one request: the payload to publish
-    back to Java, and what M5 needs to persist a `SimulationRun` for it."""
+    back to Java, and what M5 needs to persist a `SimulationRun` for it. Doesn't duplicate
+    `matchId`/`modelVersion` as separate fields — they're already in `reply_payload`, and a second
+    copy would just be one more place for the two to drift apart."""
 
-    match_id: str
-    model_version: str
     n_simulations: int
     reply_payload: dict[str, Any]
     recorder: SamplingRecorder
@@ -63,8 +63,6 @@ def build_response_payload(payload: dict[str, Any]) -> RequestOutcome:
         "expiryDays": evaluation.response.expiry_days,
     }
     return RequestOutcome(
-        match_id=request.match_id,
-        model_version=evaluation.response.model_version,
         n_simulations=n_simulations,
         reply_payload=reply,
         recorder=evaluation.recorder,
@@ -112,13 +110,24 @@ class CompatibilityScoreConsumer:
                 routing_key=RESPONSE_ROUTING_KEY,
             )
             # Persisted after publishing, not before: Java doesn't wait on this either way (it's
-            # fire-and-forget, DEC-016), so there's no reason to delay the reply for it.
-            async with get_session() as session:
-                await persist_run(
-                    session,
-                    match_id=outcome.match_id,
-                    model_version=outcome.model_version,
-                    n_simulations=outcome.n_simulations,
-                    compatibility_score=outcome.reply_payload["compatibilityScore"],
-                    recorder=outcome.recorder,
+            # fire-and-forget, DEC-016), so there's no reason to delay the reply for it. Caught,
+            # not left to propagate: `message.process()` rejects (requeue=False) on any exception
+            # here, which would silently and permanently drop this SimulationRun with no retry —
+            # the score already reached Java either way, so a failed *persist* shouldn't also cost
+            # the message.
+            try:
+                async with get_session() as session:
+                    await persist_run(
+                        session,
+                        match_id=outcome.reply_payload["matchId"],
+                        model_version=outcome.reply_payload["modelVersion"],
+                        n_simulations=outcome.n_simulations,
+                        compatibility_score=outcome.reply_payload["compatibilityScore"],
+                        expiry_days=outcome.reply_payload["expiryDays"],
+                        recorder=outcome.recorder,
+                    )
+            except Exception:
+                logger.exception(
+                    "Could not persist SimulationRun for match %s (score was already sent)",
+                    outcome.reply_payload["matchId"],
                 )

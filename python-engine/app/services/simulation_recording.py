@@ -76,6 +76,7 @@ async def persist_run(
     model_version: str,
     n_simulations: int,
     compatibility_score: float,
+    expiry_days: int,
     recorder: SamplingRecorder,
 ) -> None:
     run = SimulationRun(
@@ -83,6 +84,7 @@ async def persist_run(
         model_version=model_version,
         n_simulations=n_simulations,
         compatibility_score=compatibility_score,
+        expiry_days=expiry_days,
     )
     session.add(run)
     await session.flush()  # populates run.id, needed by the child rows below

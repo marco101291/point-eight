@@ -1,5 +1,6 @@
 """The Compatibility Engine — FastAPI entry point."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,9 +16,10 @@ from app.persistence.database import init_models
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    await init_models()
     consumer = CompatibilityScoreConsumer(settings.rabbitmq_url)
-    await consumer.start()
+    # Independent targets — Postgres and RabbitMQ — so there's no reason to wait for one before
+    # starting the other.
+    await asyncio.gather(init_models(), consumer.start())
     try:
         yield
     finally:

@@ -63,10 +63,12 @@ def test_a_bad_ratio_alone_can_collapse_a_simulation_that_never_reaches_hostile(
 ) -> None:
     """Forces collapse_probability to certainty, regardless of the discrete EmotionalState, to
     verify the ratio-based path (DEC in docs/architecture.md, M4) actually ends the simulation on
-    its own — not just alongside the Markov chain reaching COLLAPSED."""
+    its own — not just alongside the Markov chain reaching COLLAPSED. The discrete state is then
+    forced to agree, so a persisted "collapsed" outcome never disagrees with the emotional state
+    recorded alongside it."""
     monkeypatch.setattr(simulation_module, "collapse_probability", lambda _ratio: 1.0)
 
     result = run_simulation(stable_agent(), stable_agent(), rng=random.Random(4))
 
     assert result.outcome == "collapsed"
-    assert result.final_state.emotional_state.value != "collapsed"
+    assert result.final_state.emotional_state.value == "collapsed"

@@ -7,7 +7,7 @@ suggestion is deferred; see DEC-012 in `docs/architecture.md` for why, and what 
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 from app.domain.agent import Agent
@@ -20,7 +20,7 @@ from app.domain.scenarios import (
     Scenario,
     TrustBreach,
 )
-from app.domain.state import RelationshipState
+from app.domain.state import EmotionalState, RelationshipState
 
 MAX_DAYS = 1000
 MIN_INTERVAL_DAYS = 1
@@ -101,11 +101,18 @@ def run_simulation(
         outcome = scenario.resolve(state, agent_a, agent_b, rng)
         state = outcome.state
 
+        ratio_collapse = rng.random() < collapse_probability(ratio(state))
+        if ratio_collapse and not state.is_collapsed:
+            # The ratio can end things even from TENSE/HOSTILE, never having reached the discrete
+            # chain's COLLAPSED state — force it to agree before narrating or returning, so a
+            # "collapsed" outcome never disagrees with the emotional state recorded alongside it
+            # (M5 persists exactly this pairing; see DEC in docs/architecture.md).
+            state = replace(state, emotional_state=EmotionalState.COLLAPSED)
+
         if observer is not None:
             observer.on_day(simulation_index, day, state)
 
-        ratio_collapse = rng.random() < collapse_probability(ratio(state))
-        if state.is_collapsed or ratio_collapse:
+        if state.is_collapsed:
             result = SimulationResult(expiry_day=day, outcome="collapsed", final_state=state)
             if observer is not None:
                 observer.on_simulation_end(simulation_index, result)
