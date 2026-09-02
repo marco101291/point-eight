@@ -86,8 +86,13 @@ public class MatchController {
     return MatchResponse.from(lifecycle.reject(MatchId.of(id)));
   }
 
-  /** Asks the Engine for a score for this match, via synchronous REST (M2). */
+  /**
+   * Asks the Engine for a score for this match, over RabbitMQ (M4) — fire-and-forget, so this
+   * returns before the score exists. 202, not 200: the request was accepted, not completed. Poll
+   * {@code GET /api/matches/{id}} to see the score once it lands.
+   */
   @PostMapping("/{id}/score")
+  @ResponseStatus(HttpStatus.ACCEPTED)
   public MatchResponse requestScore(@PathVariable String id) {
     return MatchResponse.from(requestScore.execute(MatchId.of(id)));
   }
