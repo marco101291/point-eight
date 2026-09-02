@@ -137,9 +137,74 @@ done speculatively now.
 ### DEC-013 — `modelVersion` stays "v0" for now, even though the model is real
 M3 replaces the M2 random stub with the actual engine, which is exactly the scenario DEC-009's
 envelope was built for — bumping `modelVersion` to `"v1"` would make that traceable. It isn't
-bumped in this change: Java's `EngineCompatibilityClient` still sends `"v0"`, and this branch is
-scoped to `python-engine` only (never mix `java-system` and `python-engine` in one PR/branch). The
-bump is a deliberate, separate one-line java-system follow-up.
+bumped in this change: Java's engine client still sends `"v0"`, and this branch is scoped to
+`python-engine` only (never mix `java-system` and `python-engine` in one PR/branch). The bump is a
+deliberate, separate one-line java-system follow-up. (M4 note: the client that sends `"v0"` is now
+`AmqpCompatibilityEngineClient`, not `EngineCompatibilityClient` — see DEC-016 — but the version
+itself still hasn't moved, and see DEC-016's own note on where version validation does and doesn't
+apply now.)
+
+### DEC-014 — Specification for Layer 1 eligibility, Strategy for picking among them
+The doc names two separate patterns for candidate selection (section 2): Specification for Layer 1
+filters, Strategy for the pick itself. `UserSpecification` (`user/domain`, composable via
+`and`/`or`/`negate`) answers "does this candidate count at all" — `NotSelf` and
+`ReciprocalGenderInterest` (`match/domain`), composed by `CandidateEligibility.of(seeker)`.
+`CandidateSelectionStrategy` (`match/domain`) answers "which one, out of an already-eligible pool"
+— `RandomEligibleCandidateStrategy` is the only implementation M4 needs, uniform at random.
+
+Splitting these was deliberate: availability (does the candidate already have an open match?) is a
+`MatchRepository` concern, not a Layer 1 rule, so it can't live inside a pure `UserSpecification`.
+`AssignNextMatchUseCase` composes eligibility + availability into the pool it hands the strategy,
+which never has to know why a candidate was excluded — only that it wasn't in the list.
+
+`RandomEligibleCandidateStrategy` lives in `match/infrastructure`, not `match/domain`, even though
+its logic is pure — same reasoning as `EngineCompatibilityClient` before it (DEC-009): the
+interface is the port, and whichever implementation Spring is meant to wire in as a bean is the
+adapter, regardless of whether that implementation does I/O. Its `RandomGenerator` argument is a
+method parameter, not a constructor-injected field, mirroring `Match.propose(..., Clock clock)`:
+the type stays a plain POJO that doesn't need Spring to exist, and tests can pass a fixed generator
+for a reproducible pick.
+
+### DEC-015 — `MatchExpiredEventListener` runs `AFTER_COMMIT`, and why `AssignNextMatchUseCase` needs `REQUIRES_NEW`
+If assigning the next match fails (no eligible candidate, say), the expiry that already happened
+shouldn't undo itself — they're independent facts. `@TransactionalEventListener(phase =
+AFTER_COMMIT)` gets that half right: it only fires once `expire()`'s transaction has committed.
+
+The half that isn't obvious: `AssignNextMatchUseCase.execute()` must be
+`@Transactional(propagation = REQUIRES_NEW)`, not the default. `expire()`'s `EntityManager` is only
+unbound from the thread in `afterCompletion()`, which runs *after* every `afterCommit()` callback —
+this listener included. With the default propagation, the new use case would silently join that
+already-committed, soon-to-be-discarded resource instead of opening its own, and since it isn't
+that transaction's owner, nothing it does would ever actually commit. This surfaced as a real bug
+during manual testing against containers: matches got logged as `MatchAssignedEvent` but were never
+in the database. `REQUIRES_NEW` forces a genuinely new connection/transaction, sidestepping the
+stale-resource window entirely.
+
+### DEC-016 — Fire-and-forget over RabbitMQ replaces the synchronous REST call for scoring
+The M2/M3 flow (`EngineCompatibilityClient` over `RestClient`) blocked Java for as long as
+`run_batch` took — ~0.85s, worse if `default_simulations` ever goes back up (DEC-012). RPC-style
+messaging (`RabbitTemplate.convertSendAndReceive`) was considered and rejected: it would change the
+transport without solving the actual problem, since Java would still be blocked waiting.
+
+`CompatibilityEnginePort` changes shape accordingly: `assess(agentA, agentB) ->
+CompatibilityAssessment` becomes `requestAssessment(matchId, agentA, agentB) -> void`.
+`AmqpCompatibilityEngineClient` publishes to `compatibility.score.requested` and returns;
+python-engine's `CompatibilityScoreConsumer` (`app/messaging.py`, aio-pika) processes the request
+and publishes to `compatibility.score.computed`; `CompatibilityScoreResponseListener` consumes that
+and calls the new `ApplyCompatibilityScoreUseCase`. `RequestCompatibilityScoreUseCase` no longer
+applies a score itself — it only publishes and returns the match as-is.
+`POST /api/matches/{id}/score` returns `202 Accepted`, not `200`, to say so honestly.
+
+`EngineCompatibilityClient`/`EngineRestClientConfig` and their REST-only DTOs
+(`CompatibilityRequestDto`/`CompatibilityResponseDto`) are deleted, not left alongside the new path
+— nothing called them anymore, and two ways to ask for the same thing is exactly the kind of
+parallel-path complexity this project avoids on purpose. `POST /api/v1/compatibility` on the
+python-engine side is untouched: it's a separate, still-useful way to exercise the Engine directly
+without a broker, not a duplicate of the async flow.
+
+Neither side validates `modelVersion` on the async path the way the REST router does — python-engine's
+`build_response_payload` calls `evaluate()` directly, which never checked the version to begin with
+(only `app/api/compatibility.py`'s router did). Noted as a gap, not fixed here: see Open questions.
 
 ## Open questions
 
@@ -148,9 +213,14 @@ bump is a deliberate, separate one-line java-system follow-up.
 - Persistence in `python-engine`: SQLAlchemy vs. direct psycopg for `SimulationRun`. M3 added the
   engine that produces a `CompatibilityReport`, but nothing persists it yet — `evaluate()` computes
   and returns it in the same request. Still open.
-- Bump `EngineCompatibilityClient`'s `modelVersion` to `"v1"` on the java-system side (DEC-013).
-- Who triggers `activate` on a `PENDING` match: today it's manual. In M4 the scheduler should either
+- Bump `modelVersion` to `"v1"` on the java-system side (DEC-013) — and once it's bumped, decide
+  whether `modelVersion` should be validated on the AMQP path too, not just the REST one (DEC-016).
+- Who triggers `activate` on a `PENDING` match: today it's manual. The scheduler should either
   activate it as soon as it's assigned, or leave `PENDING` as a preparation window with its own
   timeout.
 - `cumulativeConfidenceScore` exists but never moves: still need to define how a match's outcome
-  adjusts it. Depends on having real predictions from the Engine (M3).
+  adjusts it. Depends on having real predictions from the Engine (M3, done) — the adjustment rule
+  itself is still undefined.
+- Candidate pool for `AssignNextMatchUseCase` (DEC-014) is the first N registered users, filtered in
+  memory — no query pushes Layer 1 reciprocity or availability down to the database. Fine at this
+  scale, not something to carry into M5 unexamined.
