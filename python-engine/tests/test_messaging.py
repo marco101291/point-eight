@@ -48,12 +48,28 @@ def test_response_carries_the_same_match_id_as_the_request() -> None:
         "agentB": _agent(),
     }
 
-    response = build_response_payload(payload)
+    outcome = build_response_payload(payload)
 
-    assert response["matchId"] == payload["matchId"]
-    assert response["modelVersion"] == "v0"
-    assert 0.0 <= response["compatibilityScore"] <= 1.0
-    assert response["expiryDays"] >= 0
+    assert outcome.match_id == payload["matchId"]
+    assert outcome.reply_payload["matchId"] == payload["matchId"]
+    assert outcome.reply_payload["modelVersion"] == "v0"
+    assert 0.0 <= outcome.reply_payload["compatibilityScore"] <= 1.0
+    assert outcome.reply_payload["expiryDays"] >= 0
+
+
+def test_outcome_carries_a_recorder_with_transition_counts() -> None:
+    payload = {
+        "matchId": "9f5196b4-fa21-4ff8-a697-cca43787b42e",
+        "modelVersion": "v0",
+        "agentA": _agent(),
+        "agentB": _agent(),
+    }
+
+    outcome = build_response_payload(payload)
+
+    assert outcome.n_simulations == 25
+    assert sum(outcome.recorder.transition_counts.values()) > 0
+    assert len(outcome.recorder.trajectories) > 0
 
 
 def test_rejects_a_payload_missing_layer_2() -> None:

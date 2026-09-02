@@ -8,6 +8,7 @@ doesn't matter which one runs first.
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import aio_pika
@@ -15,7 +16,9 @@ from aio_pika.abc import AbstractIncomingMessage, AbstractRobustConnection
 
 from app.api.schemas import CompatibilityRequest
 from app.config import settings
+from app.persistence.database import get_session
 from app.services.compatibility import evaluate
+from app.services.simulation_recording import SamplingRecorder, persist_run
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +37,38 @@ class CompatibilityScoreRequestMessage(CompatibilityRequest):
     match_id: str
 
 
-def build_response_payload(payload: dict[str, Any]) -> dict[str, Any]:
+@dataclass(frozen=True)
+class RequestOutcome:
+    """Everything the AMQP callback needs after processing one request: the payload to publish
+    back to Java, and what M5 needs to persist a `SimulationRun` for it."""
+
+    match_id: str
+    model_version: str
+    n_simulations: int
+    reply_payload: dict[str, Any]
+    recorder: SamplingRecorder
+
+
+def build_response_payload(payload: dict[str, Any]) -> RequestOutcome:
     """The actual work: parse a request payload, run the batch, shape a response payload. Pulled
-    out of the AMQP callback so it's testable without a running broker."""
+    out of the AMQP callback (still fully synchronous, no DB) so it's testable without a running
+    broker or database."""
     request = CompatibilityScoreRequestMessage.model_validate(payload)
-    response = evaluate(request, n_simulations=settings.default_simulations)
-    return {
+    n_simulations = settings.default_simulations
+    evaluation = evaluate(request, n_simulations=n_simulations)
+    reply = {
         "matchId": request.match_id,
-        "modelVersion": response.model_version,
-        "compatibilityScore": response.compatibility_score,
-        "expiryDays": response.expiry_days,
+        "modelVersion": evaluation.response.model_version,
+        "compatibilityScore": evaluation.response.compatibility_score,
+        "expiryDays": evaluation.response.expiry_days,
     }
+    return RequestOutcome(
+        match_id=request.match_id,
+        model_version=evaluation.response.model_version,
+        n_simulations=n_simulations,
+        reply_payload=reply,
+        recorder=evaluation.recorder,
+    )
 
 
 class CompatibilityScoreConsumer:
@@ -81,9 +105,20 @@ class CompatibilityScoreConsumer:
     async def _on_request(self, message: AbstractIncomingMessage) -> None:
         async with message.process():
             payload = json.loads(message.body)
-            reply_payload = build_response_payload(payload)
+            outcome = build_response_payload(payload)
             assert self._exchange is not None  # set in start(), before any message can arrive
             await self._exchange.publish(
-                aio_pika.Message(body=json.dumps(reply_payload).encode()),
+                aio_pika.Message(body=json.dumps(outcome.reply_payload).encode()),
                 routing_key=RESPONSE_ROUTING_KEY,
             )
+            # Persisted after publishing, not before: Java doesn't wait on this either way (it's
+            # fire-and-forget, DEC-016), so there's no reason to delay the reply for it.
+            async with get_session() as session:
+                await persist_run(
+                    session,
+                    match_id=outcome.match_id,
+                    model_version=outcome.model_version,
+                    n_simulations=outcome.n_simulations,
+                    compatibility_score=outcome.reply_payload["compatibilityScore"],
+                    recorder=outcome.recorder,
+                )

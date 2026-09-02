@@ -9,10 +9,12 @@ from app.api.compatibility import router as compatibility_router
 from app.api.status import router as status_router
 from app.config import settings
 from app.messaging import CompatibilityScoreConsumer
+from app.persistence.database import init_models
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await init_models()
     consumer = CompatibilityScoreConsumer(settings.rabbitmq_url)
     await consumer.start()
     try:
