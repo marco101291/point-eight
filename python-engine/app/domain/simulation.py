@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.domain.agent import Agent
+from app.domain.gottman import collapse_probability, ratio
 from app.domain.scenarios import (
     ExternalCrisis,
     MoneyConflict,
@@ -65,10 +66,11 @@ def run_simulation(
 ) -> SimulationResult:
     """One relationship, lived out day by day until it collapses or reaches `max_days`.
 
-    Collapse is `state.emotional_state is COLLAPSED` — the Markov chain's absorbing state —
-    rather than the section-4 pseudocode's `resentment >= COLLAPSE_THRESHOLD`. Once M3 added a
-    discrete state layer (for M5's graph), that state's own terminal condition became the natural
-    place to end the simulation instead of a second, separate threshold.
+    Two independent ways to collapse, both checked every scenario: reaching `EmotionalState.
+    COLLAPSED` (the M3 Markov chain's absorbing state, tracking momentary emotional climate), or
+    a bad Gottman ratio simply wearing the relationship down (`collapse_probability`, M4) — a pair
+    that never reaches HOSTILE but sustains a poor ratio can still end this way, matching Gottman's
+    finding that the ratio predicts breakup independent of any single conflict's intensity.
     """
     rng = rng or random.Random()
     state = RelationshipState.initial()
@@ -79,7 +81,8 @@ def run_simulation(
         outcome = scenario.resolve(state, agent_a, agent_b, rng)
         state = outcome.state
 
-        if state.is_collapsed:
+        ratio_collapse = rng.random() < collapse_probability(ratio(state))
+        if state.is_collapsed or ratio_collapse:
             return SimulationResult(expiry_day=day, outcome="collapsed", final_state=state)
 
         day += random_interval(rng)

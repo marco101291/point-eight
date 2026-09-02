@@ -1,15 +1,31 @@
 """The Compatibility Engine — FastAPI entry point."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.api.compatibility import router as compatibility_router
 from app.api.status import router as status_router
 from app.config import settings
+from app.messaging import CompatibilityScoreConsumer
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    consumer = CompatibilityScoreConsumer(settings.rabbitmq_url)
+    await consumer.start()
+    try:
+        yield
+    finally:
+        await consumer.stop()
+
 
 app = FastAPI(
     title="0.8 — The Compatibility Engine",
     version=settings.version,
     description="Monte Carlo + Markov engine that estimates a simulated relationship's duration.",
+    lifespan=lifespan,
 )
 
 app.include_router(status_router)

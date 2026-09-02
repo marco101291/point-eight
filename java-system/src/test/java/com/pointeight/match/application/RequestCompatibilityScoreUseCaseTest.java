@@ -3,7 +3,9 @@ package com.pointeight.match.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -12,7 +14,6 @@ import com.pointeight.match.domain.MatchId;
 import com.pointeight.match.domain.MatchNotFoundException;
 import com.pointeight.match.domain.MatchRepository;
 import com.pointeight.simulation.domain.AgentSnapshot;
-import com.pointeight.simulation.domain.CompatibilityAssessment;
 import com.pointeight.simulation.domain.CompatibilityEnginePort;
 import com.pointeight.user.domain.AttachmentStyle;
 import com.pointeight.user.domain.CommunicationProfile;
@@ -52,7 +53,7 @@ class RequestCompatibilityScoreUseCaseTest {
   }
 
   @Test
-  void le_pide_el_score_al_motor_y_lo_asigna_al_match() {
+  void publica_el_pedido_de_score_y_devuelve_el_match_sin_tocar() {
     User userA = sampleUser();
     User userB = sampleUser();
     Match match = Match.propose(userA.id(), userB.id(), Duration.ofHours(12), CLOCK);
@@ -60,15 +61,14 @@ class RequestCompatibilityScoreUseCaseTest {
     when(matches.findById(match.id())).thenReturn(Optional.of(match));
     when(users.findById(userA.id())).thenReturn(Optional.of(userA));
     when(users.findById(userB.id())).thenReturn(Optional.of(userB));
-    when(engine.assess(any(AgentSnapshot.class), any(AgentSnapshot.class)))
-        .thenReturn(new CompatibilityAssessment(0.73, Duration.ofDays(20)));
-    when(matches.save(match)).thenReturn(match);
 
     Match result = useCase.execute(match.id());
 
-    assertThat(result.compatibilityScore()).isPresent();
-    assertThat(result.compatibilityScore().get().value()).isEqualTo(0.73);
-    verify(matches).save(match);
+    assertThat(result).isSameAs(match);
+    assertThat(result.compatibilityScore()).isEmpty();
+    verify(engine)
+        .requestAssessment(eq(match.id()), any(AgentSnapshot.class), any(AgentSnapshot.class));
+    verify(matches, never()).save(any());
   }
 
   @Test
