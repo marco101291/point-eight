@@ -32,7 +32,9 @@ export default async function Home() {
 
   return (
     <main>
-      <Logo />
+      <div className="logo-wrap">
+        <Logo />
+      </div>
       <h1>M0 — Setup</h1>
       <p className="lede">
         Monorepo levantado. Tres servicios, dos bases de datos y una cola. El dominio real empieza en

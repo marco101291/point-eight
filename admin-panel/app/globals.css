@@ -23,6 +23,8 @@ main {
   padding: 80px 24px;
 }
 
+.logo-wrap { text-align: center; }
+
 h1 { font-size: 20px; font-weight: normal; letter-spacing: 1px; }
 
 .lede { color: var(--muted); line-height: 1.7; }
