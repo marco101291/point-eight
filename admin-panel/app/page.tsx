@@ -57,6 +57,9 @@ export default async function Home() {
       <p className="nav">
         <Link href="/spaghetti">Spaghetti Plot →</Link>
       </p>
+      <p className="nav">
+        <Link href="/compound">El Compound →</Link>
+      </p>
     </main>
   );
 }
