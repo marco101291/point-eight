@@ -50,10 +50,10 @@ def test_response_carries_the_same_match_id_as_the_request() -> None:
 
     outcome = build_response_payload(payload)
 
-    assert outcome.reply_payload["matchId"] == payload["matchId"]
-    assert outcome.reply_payload["modelVersion"] == "v0"
-    assert 0.0 <= outcome.reply_payload["compatibilityScore"] <= 1.0
-    assert outcome.reply_payload["expiryDays"] >= 0
+    assert outcome.match_id == payload["matchId"]
+    assert outcome.response.model_version == "v0"
+    assert 0.0 <= outcome.response.compatibility_score <= 1.0
+    assert outcome.response.expiry_days >= 0
 
 
 def test_outcome_carries_a_recorder_with_transition_counts() -> None:

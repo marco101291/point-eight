@@ -40,7 +40,10 @@ def build_markov_graph(counts: Iterable[tuple[str, str, int]]) -> MarkovGraph:
     """Aggregates raw (from_state, to_state, count) triples — one per `simulation_transitions`
     row, across every run ever recorded — into a probability per source state. This is the
     "learned" matrix DEC-017 exists to produce, as opposed to the hand-authored `TRANSITIONS`
-    table in `app/domain/state.py`.
+    table in `app/domain/state.py` — and it can legitimately disagree with that table: a
+    ratio-driven collapse (`app/domain/simulation.py`) can force COLLAPSED from TENSE or HOSTILE,
+    states `TRANSITIONS` never routes directly to COLLAPSED. An edge like `tense -> collapsed`
+    here isn't a bug, it's the ratio path showing up in what actually happened.
 
     Takes plain triples rather than ORM rows so it's testable without a database — the endpoint
     below is the only thing that knows `SimulationTransition` exists. One pass is enough: each

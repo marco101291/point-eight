@@ -14,7 +14,7 @@ from typing import Any
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage, AbstractRobustConnection
 
-from app.api.schemas import CompatibilityRequest
+from app.api.schemas import CompatibilityRequest, CompatibilityResponse
 from app.config import settings
 from app.persistence.database import get_session
 from app.services.compatibility import evaluate
@@ -39,13 +39,15 @@ class CompatibilityScoreRequestMessage(CompatibilityRequest):
 
 @dataclass(frozen=True)
 class RequestOutcome:
-    """Everything the AMQP callback needs after processing one request: the payload to publish
-    back to Java, and what M5 needs to persist a `SimulationRun` for it. Doesn't duplicate
-    `matchId`/`modelVersion` as separate fields — they're already in `reply_payload`, and a second
-    copy would just be one more place for the two to drift apart."""
+    """Everything the AMQP callback needs after processing one request: the typed response to
+    publish back to Java, and what M5 needs to persist a `SimulationRun` for it. Keeps `response`
+    as the Pydantic model rather than a plain dict, so both the wire payload and the persist_run
+    call below read from the same type-checked fields instead of two independently-typed string
+    keys that a rename could silently split apart."""
 
+    match_id: str
+    response: CompatibilityResponse
     n_simulations: int
-    reply_payload: dict[str, Any]
     recorder: SamplingRecorder
 
 
@@ -56,15 +58,10 @@ def build_response_payload(payload: dict[str, Any]) -> RequestOutcome:
     request = CompatibilityScoreRequestMessage.model_validate(payload)
     n_simulations = settings.default_simulations
     evaluation = evaluate(request, n_simulations=n_simulations)
-    reply = {
-        "matchId": request.match_id,
-        "modelVersion": evaluation.response.model_version,
-        "compatibilityScore": evaluation.response.compatibility_score,
-        "expiryDays": evaluation.response.expiry_days,
-    }
     return RequestOutcome(
+        match_id=request.match_id,
+        response=evaluation.response,
         n_simulations=n_simulations,
-        reply_payload=reply,
         recorder=evaluation.recorder,
     )
 
@@ -104,9 +101,10 @@ class CompatibilityScoreConsumer:
         async with message.process():
             payload = json.loads(message.body)
             outcome = build_response_payload(payload)
+            reply = {"matchId": outcome.match_id, **outcome.response.model_dump(by_alias=True)}
             assert self._exchange is not None  # set in start(), before any message can arrive
             await self._exchange.publish(
-                aio_pika.Message(body=json.dumps(outcome.reply_payload).encode()),
+                aio_pika.Message(body=json.dumps(reply).encode()),
                 routing_key=RESPONSE_ROUTING_KEY,
             )
             # Persisted after publishing, not before: Java doesn't wait on this either way (it's
@@ -119,15 +117,15 @@ class CompatibilityScoreConsumer:
                 async with get_session() as session:
                     await persist_run(
                         session,
-                        match_id=outcome.reply_payload["matchId"],
-                        model_version=outcome.reply_payload["modelVersion"],
+                        match_id=outcome.match_id,
+                        model_version=outcome.response.model_version,
                         n_simulations=outcome.n_simulations,
-                        compatibility_score=outcome.reply_payload["compatibilityScore"],
-                        expiry_days=outcome.reply_payload["expiryDays"],
+                        compatibility_score=outcome.response.compatibility_score,
+                        expiry_days=outcome.response.expiry_days,
                         recorder=outcome.recorder,
                     )
             except Exception:
                 logger.exception(
                     "Could not persist SimulationRun for match %s (score was already sent)",
-                    outcome.reply_payload["matchId"],
+                    outcome.match_id,
                 )
