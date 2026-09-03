@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Logo } from "./logo";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,12 @@ export default async function Home() {
           </li>
         ))}
       </ul>
+      <p className="nav">
+        <Link href="/markov-graph">Grafo de Markov →</Link>
+      </p>
+      <p className="nav">
+        <Link href="/spaghetti">Spaghetti Plot →</Link>
+      </p>
     </main>
   );
 }

@@ -43,3 +43,42 @@ h1 { font-size: 20px; font-weight: normal; letter-spacing: 1px; }
 .badge { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
 .badge.up { color: var(--ok); }
 .badge.down { color: var(--down); }
+
+.nav { margin-top: 48px; }
+.nav a, .back-link {
+  color: var(--fg);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+.nav a:hover, .back-link:hover { border-bottom-color: var(--fg); }
+.back-link { display: inline-block; margin-bottom: 32px; color: var(--muted); font-size: 14px; }
+
+.markov-graph { width: 100%; height: auto; margin-top: 32px; }
+
+.spaghetti-plot { width: 100%; height: auto; margin-top: 24px; }
+
+.match-picker { list-style: none; padding: 0; margin: 32px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.match-picker button {
+  background: none;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.match-picker button:hover { border-color: var(--fg); color: var(--fg); }
+.match-picker button.selected { border-color: var(--ok); color: var(--fg); }
+
+.graph-tooltip {
+  position: fixed;
+  z-index: 10;
+  pointer-events: none;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
