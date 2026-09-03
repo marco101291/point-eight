@@ -65,8 +65,14 @@ anymore for that case, only for the very first match between two users.
   `.gradle/` owned by root and breaks later deletions.
 - **Published ports come from `.env`**, and several aren't at the "obvious" value because they
   clashed with other projects running on the same machine (`alivia-postgres` occupies 5434, a
-  `next-server` occupies 3000). They ended up as: System **8080**, Engine **8000**, panel **3001**,
-  System Postgres **5433**, Engine Postgres **5435**, RabbitMQ **5672** / **15672**.
+  `next-server` occupies 3000). They ended up as: System **8080**, Engine **8000**, panel **3006**,
+  System Postgres **5436**, Engine Postgres **5435**, RabbitMQ **5672** / **15672**.
+- **The admin panel's local dev server** (`npm run dev` / `npm start` inside `admin-panel/`,
+  outside Docker) defaults to port **3007**, not 3006 — 3000 and 3001 were both already taken by
+  an unrelated `next-server` on this machine. It reads `SYSTEM_BASE_URL`/`ENGINE_BASE_URL` the same
+  way the Docker container does, but falls back to `http://localhost:8080`/`:8000` when they're
+  unset, which already matches the ports those two services publish to the host — so no env vars
+  need setting to run it locally against the rest of the stack in Docker.
 - **The spec doc and the code deliberately differ** in naming: the doc uses provisional names
   (`hang-the-dj-sim`, `com.system`) and defers the rename to M1; `point-eight` / `com.pointeight`
   was adopted from M0 on (`DEC-001`).

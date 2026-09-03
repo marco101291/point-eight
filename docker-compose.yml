@@ -81,6 +81,10 @@ services:
   python-engine:
     build: ./python-engine
     container_name: pointeight-engine
+    # RabbitMQ's healthcheck can report healthy an instant before it actually accepts AMQP
+    # connections, which fails aio_pika.connect_robust() during the lifespan startup and exits
+    # the process — restart instead of requiring a manual `docker compose up -d python-engine`.
+    restart: on-failure
     depends_on:
       postgres-engine:
         condition: service_healthy
