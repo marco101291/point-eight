@@ -237,6 +237,44 @@ the tables M5's admin panel reads from. `services/compatibility.evaluate()` now 
 `Evaluation` bundling the wire response with the recorder; the REST endpoint takes `.response` and
 discards the rest.
 
+### DEC-018 — M5's three visualizations, the live feed, and a client-only-layout lesson
+`d3-force` (not `react-flow`, not a hand-rolled static SVG) for both graph views — the Markov
+graph's 5 discrete states and the compound graph's users/matches. `react-flow` was ruled out as too
+opinionated for what's ultimately a plain node-link diagram; a hand-rolled layout was viable for the
+5 fixed Markov states but wouldn't generalize to the compound graph's unbounded, ever-changing user
+count, so one library serves both instead of introducing a second later.
+
+That choice surfaced a real SSR/hydration lesson: the compound graph's `layout()` initially ran
+directly in the component's render body, computing during both the server prerender and the client
+hydration render. 300 ticks of `Math.cos`/`Math.sin`/`sqrt`-driven force simulation can round
+ever-so-slightly differently between the server's V8 build and the browser's, and after 300
+compounding iterations that's enough to visibly diverge — React flagged a hydration mismatch on
+every node's `cx`/`cy`. Fixed by moving the computation into a `useEffect` (client-only, never runs
+during SSR) — the same reason `MarkovGraphView`'s fetch-then-layout never had this problem: nothing
+chaotic ever ran before mount there either, just by how it was already built.
+
+A second, related bug: the SVG's `viewBox` was originally sized from a formula guessing at the node
+count (`side = f(sqrt(n))`), independent of the actual force parameters. Repulsion is pairwise, so
+it grows faster than linearly with node count — a size tuned to look right for 4 nodes clipped
+almost everything for 20, leaving only one edge that happened to fall inside the guessed box
+visible. Fixed by letting the simulation settle unconstrained around the origin and fitting the
+`viewBox` to the resulting bounding box afterward, instead of guessing it beforehand.
+
+The compound graph needed no new java-system endpoint: `GET /api/users` and `GET /api/matches`
+already existed and only ever serialize Layer 1 fields, so the non-negotiable invariant held for
+free.
+
+The live "the System deciding" feed reads `MatchAssignedEvent`/`MatchExpiredEvent` — scoring
+request/response is deliberately out of scope for now (see Open questions). A new `RecentEventsFeed`
+(`com.pointeight.events`, mirroring `status`'s existing precedent of a flat top-level package with
+no domain/application split for a cross-cutting, non-aggregate concern) sits next to
+`DomainEventLogger` as another fan-in `@EventListener` on every `DomainEvent`, keeping an in-memory,
+process-lifetime ring buffer of the last 200 it recognizes — deliberately not every event type, and
+deliberately not persisted: this is an observability feed for one admin panel, not an audit log.
+`GET /api/events?since={sequence}` is polled by the panel every 2.5s rather than pushed over SSE:
+simpler to build and debug, and consistent with the rest of the panel's existing polling style
+(M0's `force-dynamic` status probes) — at the cost of not being real push and up to ~2.5s of lag.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -252,3 +290,7 @@ discards the rest.
 - Candidate pool for `AssignNextMatchUseCase` (DEC-014) is the first N registered users, filtered in
   memory — no query pushes Layer 1 reciprocity or availability down to the database. Fine at this
   scale, not something to carry into M5 unexamined.
+- The live feed (DEC-018) doesn't show the async scoring cycle (request over RabbitMQ, response
+  applied by `ApplyCompatibilityScoreUseCase`) — neither side publishes a `DomainEvent` for it today.
+  Adding one would touch `RequestCompatibilityScoreUseCase`/`ApplyCompatibilityScoreUseCase`, not
+  just `RecentEventsFeed`. If polling lag ever actually matters, revisit SSE then too.

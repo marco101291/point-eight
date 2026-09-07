@@ -6,7 +6,7 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-017`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-018`).
 
 ---
 
@@ -34,10 +34,10 @@ React/Next.js.
 | **M2** Minimal engine | ✅ | FastAPI exposes `POST /api/v1/compatibility` (random score + expiry, envelope with `modelVersion`); Java consumes it via `RestClient` at `POST /api/matches/{id}/score`. 73 tests |
 | **M3** Real simulation | ✅ | `Agent`, 5 Strategy scenarios, discrete Markov states (`EmotionalState`) + `RelationshipState`, `run_batch` (plain loop, not vectorized — `DEC-012`). 30 new Python tests |
 | **M4** Async + events | ✅ | Candidate `Specification`/`Strategy` (`DEC-014`), `MatchExpiredEvent` auto-rematches both users (`AFTER_COMMIT` + `REQUIRES_NEW`, `DEC-015`), real `collapse_probability(ratio)`, scoring moved to fire-and-forget RabbitMQ (`DEC-016`). 99 Java tests, 39 Python tests |
-| **M5** Admin panel | ⬜ | Spaghetti plot, Markov graph, force-directed graph |
+| **M5** Admin panel | ✅ | `SimulationRun` persistence (`DEC-017`); Markov graph, spaghetti plot, force-directed compound graph (all `d3-force`, `DEC-018`); live "the System deciding" feed polling `GET /api/events`. 104 Java tests, 52 Python tests |
 | **M6** Polish | ⬜ | Engine tests, migration to Flyway, C4 |
 
-Inventory: 59 Java files (main), 6 test, 7 Python, 3 TS (before M2).
+Inventory: 86 Java files (main), 18 test, 23 Python, 15 TS.
 
 **The Python Engine runs a real simulation**, but the wire contract still says
 `modelVersion: "v0"` — bumping it to `"v1"` needs a matching one-line change in
@@ -45,8 +45,11 @@ Inventory: 59 Java files (main), 6 test, 7 Python, 3 TS (before M2).
 request now persists a `SimulationRun` (`DEC-017`, SQLAlchemy over psycopg3): the run itself, a
 50-simulation sample of full day-by-day trajectories, and observed state-transition counts across
 the whole batch — the data M5's spaghetti plot and "learned" Markov graph read from.
-**The admin panel is still just a traffic light**: it checks whether the two services respond, it
-doesn't read users or matches — that's the rest of M5, in progress.
+**The admin panel is no longer just a traffic light**: `/markov-graph`, `/spaghetti`, and
+`/compound` each read real data from both services, and `/live` polls `GET /api/events` (a new
+`com.pointeight.events` package on the Java side, `DEC-018`) for `MatchAssignedEvent`/
+`MatchExpiredEvent` as they happen — scoring's own async request/response cycle doesn't publish a
+domain event yet, so it doesn't show up there (see Open questions in `docs/architecture.md`).
 
 **Scoring is asynchronous now**: `POST /api/matches/{id}/score` returns `202 Accepted` and publishes
 the request over RabbitMQ; the score lands moments later via a separate response queue
@@ -170,4 +173,5 @@ Recorded at the end of `docs/architecture.md`. Most relevant for the upcoming mi
 the Engine keeps a replica of profiles or receives them in the payload (M4), who triggers
 `activate` on a `PENDING` match, and how `cumulativeConfidenceScore` gets adjusted (it exists today
 but never moves). The Java → Python payload format was resolved in M2 as `DEC-009`; `SimulationRun`
-persistence was resolved in M5 as `DEC-017`.
+persistence was resolved in M5 as `DEC-017`; M5's three visualizations and live feed as `DEC-018`
+— the scoring cycle joining that feed is still open.
