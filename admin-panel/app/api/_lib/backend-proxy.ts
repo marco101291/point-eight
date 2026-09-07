@@ -1,6 +1,8 @@
 // Shared by every route under app/api/ that proxies one of the two backend services, so the
 // browser never needs their base URLs directly — those env vars are only readable server-side
 // (see next.config.ts).
+import { engineBaseUrl, systemBaseUrl } from "@/app/_lib/backend";
+
 async function proxy(baseUrl: string, path: string, label: string): Promise<Response> {
   const res = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
   if (!res.ok) {
@@ -13,11 +15,9 @@ async function proxy(baseUrl: string, path: string, label: string): Promise<Resp
 }
 
 export function proxyEngine(path: string): Promise<Response> {
-  const engine = process.env.ENGINE_BASE_URL ?? "http://localhost:8000";
-  return proxy(engine, path, "El Motor");
+  return proxy(engineBaseUrl(), path, "El Motor");
 }
 
 export function proxySystem(path: string): Promise<Response> {
-  const system = process.env.SYSTEM_BASE_URL ?? "http://localhost:8080";
-  return proxy(system, path, "El Sistema");
+  return proxy(systemBaseUrl(), path, "El Sistema");
 }

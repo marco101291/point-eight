@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { isTruncated, systemBaseUrl } from "@/app/_lib/backend";
 import { SpaghettiPlot, type ScoredMatch } from "./spaghetti-plot";
 
 export const dynamic = "force-dynamic";
@@ -27,19 +28,17 @@ type LoadResult =
 const FETCH_SIZE = 50;
 
 async function loadScoredMatches(): Promise<LoadResult> {
-  const system = process.env.SYSTEM_BASE_URL ?? "http://localhost:8080";
   try {
-    const res = await fetch(`${system}/api/matches?size=${FETCH_SIZE}`, { cache: "no-store" });
+    const res = await fetch(`${systemBaseUrl()}/api/matches?size=${FETCH_SIZE}`, {
+      cache: "no-store",
+    });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const page = (await res.json()) as PageResponse;
     // Only matches the Engine already scored have a SimulationRun behind them to plot.
     const matches = page.content
       .filter((m): m is MatchResponse & { compatibilityScore: number } => m.compatibilityScore !== null)
       .map((m) => ({ id: m.id, compatibilityScore: m.compatibilityScore }));
-    // Past FETCH_SIZE total matches, older scored ones can silently fall off this page — same
-    // caveat compound/page.tsx surfaces for the identical limitation on the same endpoint.
-    const truncated = page.total > page.content.length;
-    return { ok: true, matches, truncated };
+    return { ok: true, matches, truncated: isTruncated(page) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "sin respuesta" };
   }

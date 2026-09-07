@@ -1,16 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  forceCenter,
-  forceCollide,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  type SimulationLinkDatum,
-  type SimulationNodeDatum,
-} from "d3-force";
+import type { SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import { GraphTooltip, useGraphTooltip } from "@/app/_components/graph-tooltip";
+import { runForceLayout } from "@/app/_components/force-layout";
 
 export type CompoundUser = {
   id: string;
@@ -57,6 +50,13 @@ type LayoutResult = { nodes: GraphNode[]; viewBox: string };
 // Instead the simulation runs unconstrained around the origin, and the viewBox is fit to whatever
 // bounding box it actually settles into.
 function layout(users: CompoundUser[], matches: CompoundMatch[]): LayoutResult {
+  if (users.length === 0) {
+    // Math.min/max(...[]) are Infinity/-Infinity, which would otherwise produce a broken viewBox
+    // (page.tsx never renders this component with zero users today, but layout() shouldn't rely
+    // on a caller it doesn't control to keep guaranteeing that).
+    return { nodes: [], viewBox: "0 0 1 1" };
+  }
+
   const nodes: GraphNode[] = users.map((user, i) => {
     const angle = (2 * Math.PI * i) / Math.max(1, users.length);
     const seedRadius = 20 + 15 * Math.sqrt(users.length);
@@ -69,14 +69,12 @@ function layout(users: CompoundUser[], matches: CompoundMatch[]): LayoutResult {
     match: m,
   }));
 
-  const simulation = forceSimulation(nodes)
-    .force("link", forceLink<GraphNode, GraphLink>(links).id((d) => d.id).distance(70))
-    .force("charge", forceManyBody().strength(-120))
-    .force("center", forceCenter(0, 0))
-    .force("collide", forceCollide(NODE_RADIUS + 6))
-    .stop();
-
-  for (let i = 0; i < 300; i++) simulation.tick();
+  runForceLayout(nodes, links, {
+    linkDistance: () => 70,
+    chargeStrength: -120,
+    center: [0, 0],
+    collideRadius: NODE_RADIUS + 6,
+  });
 
   const pad = NODE_RADIUS + 20;
   const xs = nodes.map((n) => n.x ?? 0);
