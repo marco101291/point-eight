@@ -275,6 +275,46 @@ deliberately not persisted: this is an observability feed for one admin panel, n
 simpler to build and debug, and consistent with the rest of the panel's existing polling style
 (M0's `force-dynamic` status probes) — at the cost of not being real push and up to ~2.5s of lag.
 
+### DEC-019 — Engine endpoint tests run against a real, ephemeral Postgres via testcontainers
+M6 closes the gap the M5 review flagged: `/api/v1/markov-graph` and
+`/api/v1/matches/{id}/trajectories` had zero test coverage beyond the pure `build_markov_graph()`
+helper — nothing exercised the actual `GROUP BY`/`SUM` query, the `selectinload` eager-load, or the
+`ORDER BY ... LIMIT 1` "most recent run" logic.
+
+Real Postgres via `testcontainers`, not SQLite and not a mocked `AsyncSession`. Neither alternative
+would have caught what these tests are actually for: a mocked session never runs real SQL at all,
+and `SimulationTrajectory.points` is a Postgres-native `JSONB` column with no SQLite equivalent —
+testing against a different dialect risks exactly the "passes in CI, breaks against the real
+database" gap the missing coverage already represented. `testcontainers` starts one Postgres
+container per test *session* (`tests/conftest.py`), not per test or per `docker compose` service:
+schema is created once, and each test's rows are truncated afterward for isolation — cheap enough
+that the whole suite, container startup included, still runs in a few seconds.
+
+This is the first place either service's test suite depends on a real database — every other test
+in both `java-system` (104 tests) and `python-engine` runs against mocked ports/repositories. That
+precedent holds everywhere else; it only breaks here because the thing under test **is** the SQL.
+
+### DEC-020 — java-system migrates to Flyway, replacing `ddl-auto: update`
+`V1__init.sql` (`java-system/src/main/resources/db/migration`) is captured from the live schema
+Hibernate's `ddl-auto: update` had already built through M0-M5 (`pg_dump --schema-only` against the
+running `postgres-system`), not hand-authored from a blank slate — the goal was a baseline
+indistinguishable from what already exists, not a redesign. `ddl-auto` switches to `validate`
+(`DEC-008` is superseded, not deleted — it's still the right record of why `update` was fine
+*then*): Hibernate now only checks the entities agree with the schema, it never creates or alters
+anything.
+
+Verified by dropping the local `postgres-system` volume entirely and letting Flyway bootstrap a
+fresh database from `V1` alone: Hibernate's `validate` accepted it with no mismatch, and a real
+user/match round-trip through the API worked end to end — not just "the app starts."
+
+The one deliberate deviation from a pure `pg_dump` capture: `user_hobbies`/`user_seeking_genders`'s
+foreign keys keep Hibernate's original auto-generated names in the *running* database, but this
+migration gives them readable ones (`fk_user_hobbies_user`, `fk_user_seeking_genders_user`) instead
+— a migration is meant to be read, and Hibernate's schema validator doesn't check constraint names,
+only tables/columns/types, so renaming them costs nothing. `matches` still has no FK to `users`:
+the Match aggregate references `UserId` only, no JPA relationship (`DEC-004`), and this baseline
+preserves that rather than quietly introducing a constraint the domain never actually declared.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -294,3 +334,12 @@ simpler to build and debug, and consistent with the rest of the panel's existing
   applied by `ApplyCompatibilityScoreUseCase`) — neither side publishes a `DomainEvent` for it today.
   Adding one would touch `RequestCompatibilityScoreUseCase`/`ApplyCompatibilityScoreUseCase`, not
   just `RecentEventsFeed`. If polling lag ever actually matters, revisit SSE then too.
+- The Engine's `expiryDays` (predicted survival, in the simulation's own day-clock — `MAX_DAYS =
+  1000` in `run_simulation`) reaches `CompatibilityScoreResponseMessage` on the Java side but is
+  never applied: `ApplyCompatibilityScoreUseCase` only assigns the score, `Match.expiryDuration`
+  stays whatever `default-expiry-seconds` (12h) or the manual override set at creation. Wiring it
+  through isn't just plumbing — `expiryDays` and the match's real expiry window are in genuinely
+  different units (a "survived" simulation reports `1000`, i.e. ~2.7 real years if read as
+  `Duration.ofDays`), and no conversion rule between simulated days and real match-window time has
+  ever been specified, here or in the spec doc. Needs that rule defined before it's implemented,
+  not a unit coercion.

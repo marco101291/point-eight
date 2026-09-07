@@ -6,7 +6,8 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-018`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-020`).
+C4 diagrams: [`docs/c4.md`](docs/c4.md).
 
 ---
 
@@ -35,7 +36,7 @@ React/Next.js.
 | **M3** Real simulation | ✅ | `Agent`, 5 Strategy scenarios, discrete Markov states (`EmotionalState`) + `RelationshipState`, `run_batch` (plain loop, not vectorized — `DEC-012`). 30 new Python tests |
 | **M4** Async + events | ✅ | Candidate `Specification`/`Strategy` (`DEC-014`), `MatchExpiredEvent` auto-rematches both users (`AFTER_COMMIT` + `REQUIRES_NEW`, `DEC-015`), real `collapse_probability(ratio)`, scoring moved to fire-and-forget RabbitMQ (`DEC-016`). 99 Java tests, 39 Python tests |
 | **M5** Admin panel | ✅ | `SimulationRun` persistence (`DEC-017`); Markov graph, spaghetti plot, force-directed compound graph (all `d3-force`, `DEC-018`); live "the System deciding" feed polling `GET /api/events`. 104 Java tests, 52 Python tests |
-| **M6** Polish | ⬜ | Engine tests, migration to Flyway, C4 |
+| **M6** Polish | ✅ | Engine endpoint tests against real Postgres via `testcontainers` (`DEC-019`); `java-system` migrates to Flyway, `ddl-auto: validate` (`DEC-020`); C4 context + container diagrams (`docs/c4.md`). 104 Java tests, 55 Python tests |
 
 Inventory: 86 Java files (main), 18 test, 23 Python, 15 TS.
 
@@ -76,6 +77,10 @@ anymore for that case, only for the very first match between two users.
   way the Docker container does, but falls back to `http://localhost:8080`/`:8000` when they're
   unset, which already matches the ports those two services publish to the host — so no env vars
   need setting to run it locally against the rest of the stack in Docker.
+- **`python-engine`'s test suite needs Docker running** (M6, `DEC-019`): the DB-backed endpoint
+  tests in `tests/api/test_insights.py` spin up a real, ephemeral Postgres via `testcontainers`,
+  reusing one container for the whole session (`tests/conftest.py`) — no `docker compose` service
+  needed, but the Docker daemon itself has to be reachable from wherever `pytest` runs.
 - **The spec doc and the code deliberately differ** in naming: the doc uses provisional names
   (`hang-the-dj-sim`, `com.system`) and defers the rename to M1; `point-eight` / `com.pointeight`
   was adopted from M0 on (`DEC-001`).
@@ -161,8 +166,10 @@ Code comments and documentation **in English**. Code identifiers, in English.
   time, so it bakes the development URLs into the image and the panel shows the services as down
   even when they're responding. Service URLs are read from the environment at runtime, inside the
   server component.
-- **Hibernate generates the schema** (`ddl-auto: update`, `DEC-008`). There are no migrations yet;
-  it migrates to Flyway in M6. When changing entities, don't write SQL by hand.
+- **Flyway owns the schema now** (`java-system/src/main/resources/db/migration`, `DEC-020`,
+  superseding `DEC-008`'s `ddl-auto: update`). `ddl-auto: validate` only checks the entities agree
+  with it. When changing a JPA entity, add a new `V{n}__description.sql` migration — Hibernate
+  won't create or alter anything by itself anymore.
 - **`seekingGenders` is a `Set<Gender>`**, even though the doc writes it in the singular (`DEC-005`).
 
 ---
@@ -174,4 +181,5 @@ the Engine keeps a replica of profiles or receives them in the payload (M4), who
 `activate` on a `PENDING` match, and how `cumulativeConfidenceScore` gets adjusted (it exists today
 but never moves). The Java → Python payload format was resolved in M2 as `DEC-009`; `SimulationRun`
 persistence was resolved in M5 as `DEC-017`; M5's three visualizations and live feed as `DEC-018`
-— the scoring cycle joining that feed is still open.
+— the scoring cycle joining that feed is still open. M6 resolved the engine's DB-backed test
+strategy as `DEC-019` and the move off `ddl-auto` as `DEC-020`.
