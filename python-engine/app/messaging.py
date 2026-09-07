@@ -6,6 +6,7 @@ declare the full topology independently on startup; RabbitMQ declarations are id
 doesn't matter which one runs first.
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -100,7 +101,10 @@ class CompatibilityScoreConsumer:
     async def _on_request(self, message: AbstractIncomingMessage) -> None:
         async with message.process():
             payload = json.loads(message.body)
-            outcome = build_response_payload(payload)
+            # Off the event loop: build_response_payload runs a Monte Carlo batch (~1s of pure
+            # CPU, no await points) — inline, it would block every other in-flight request and
+            # message for that whole duration, including /health.
+            outcome = await asyncio.to_thread(build_response_payload, payload)
             reply = {"matchId": outcome.match_id, **outcome.response.model_dump(by_alias=True)}
             assert self._exchange is not None  # set in start(), before any message can arrive
             await self._exchange.publish(

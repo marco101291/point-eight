@@ -11,6 +11,8 @@ aren't tied to a real match — recording them would just be test noise in the t
 panel reads from.
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 
 from app.api.schemas import CompatibilityRequest, CompatibilityResponse
@@ -30,4 +32,10 @@ async def compatibility(request: CompatibilityRequest) -> CompatibilityResponse:
             detail=f"Unsupported modelVersion: {request.model_version!r}",
         )
 
-    return evaluate(request, n_simulations=settings.default_simulations).response
+    # Off the event loop: evaluate() runs a Monte Carlo batch (~1s of pure CPU, no await points).
+    # async def here means FastAPI would otherwise run it inline on the loop, stalling every other
+    # in-flight request — including /health — for that full duration.
+    evaluation = await asyncio.to_thread(
+        evaluate, request, n_simulations=settings.default_simulations
+    )
+    return evaluation.response
