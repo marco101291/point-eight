@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useState } from "react";
 import {
   forceCenter,
   forceCollide,
@@ -10,6 +10,7 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
+import { GraphTooltip, useGraphTooltip } from "@/app/_components/graph-tooltip";
 
 export type CompoundUser = {
   id: string;
@@ -43,8 +44,6 @@ function edgeColor(status: string): string {
   if (status === "PENDING") return "var(--muted)";
   return "var(--down)"; // EXPIRED, REJECTED
 }
-
-type Tooltip = { x: number; y: number; label: string };
 
 type LayoutResult = { nodes: GraphNode[]; viewBox: string };
 
@@ -91,11 +90,8 @@ function layout(users: CompoundUser[], matches: CompoundMatch[]): LayoutResult {
 }
 
 export function CompoundGraph({ users, matches }: { users: CompoundUser[]; matches: CompoundMatch[] }) {
-  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
   const [layoutResult, setLayoutResult] = useState<LayoutResult | null>(null);
-  const showTooltip = (e: ReactMouseEvent, label: string) =>
-    setTooltip({ x: e.clientX, y: e.clientY, label });
-  const hideTooltip = () => setTooltip(null);
+  const { tooltip, showTooltip, hideTooltip } = useGraphTooltip();
 
   // The force simulation runs 300 chaotic iterations of Math.cos/sin/sqrt — floating-point results
   // from that can differ by a bit or two between the server's V8 and the browser's, and after 300
@@ -180,11 +176,7 @@ export function CompoundGraph({ users, matches }: { users: CompoundUser[]; match
         {users.length} usuario(s), {matches.length} match(es). Verde = ACTIVE, gris = PENDING, rojo
         = EXPIRED/REJECTED. Pasá el mouse sobre un nodo o una línea para el detalle.
       </p>
-      {tooltip && (
-        <div className="graph-tooltip" style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}>
-          {tooltip.label}
-        </div>
-      )}
+      <GraphTooltip tooltip={tooltip} />
     </div>
   );
 }

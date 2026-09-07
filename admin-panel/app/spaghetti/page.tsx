@@ -17,21 +17,29 @@ type MatchResponse = {
 
 type PageResponse = {
   content: MatchResponse[];
+  total: number;
 };
 
-type LoadResult = { ok: true; matches: ScoredMatch[] } | { ok: false; error: string };
+type LoadResult =
+  | { ok: true; matches: ScoredMatch[]; truncated: boolean }
+  | { ok: false; error: string };
+
+const FETCH_SIZE = 50;
 
 async function loadScoredMatches(): Promise<LoadResult> {
   const system = process.env.SYSTEM_BASE_URL ?? "http://localhost:8080";
   try {
-    const res = await fetch(`${system}/api/matches?size=50`, { cache: "no-store" });
+    const res = await fetch(`${system}/api/matches?size=${FETCH_SIZE}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const page = (await res.json()) as PageResponse;
     // Only matches the Engine already scored have a SimulationRun behind them to plot.
     const matches = page.content
       .filter((m): m is MatchResponse & { compatibilityScore: number } => m.compatibilityScore !== null)
       .map((m) => ({ id: m.id, compatibilityScore: m.compatibilityScore }));
-    return { ok: true, matches };
+    // Past FETCH_SIZE total matches, older scored ones can silently fall off this page — same
+    // caveat compound/page.tsx surfaces for the identical limitation on the same endpoint.
+    const truncated = page.total > page.content.length;
+    return { ok: true, matches, truncated };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "sin respuesta" };
   }
@@ -50,6 +58,12 @@ export default async function SpaghettiPage() {
         Las trayectorias día a día de una muestra de 50 simulaciones para un match — satisfacción a
         lo largo del tiempo, verde las que sobreviven, roja las que colapsan.
       </p>
+      {result.ok && result.truncated && (
+        <p className="lede">
+          Mostrando los primeros {FETCH_SIZE} matches — puede haber matches con score más viejos
+          que no se ven acá.
+        </p>
+      )}
       {result.ok ? (
         <SpaghettiPlot matches={result.matches} />
       ) : (

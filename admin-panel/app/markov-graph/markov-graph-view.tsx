@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useState } from "react";
 import {
   forceCenter,
   forceCollide,
@@ -10,6 +10,7 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
+import { GraphTooltip, useGraphTooltip } from "@/app/_components/graph-tooltip";
 
 type MarkovTransition = {
   fromState: string;
@@ -90,16 +91,10 @@ function edgePath(from: GraphNode, to: GraphNode, bow: number) {
   return { d: `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`, mid: [cx, cy] as [number, number] };
 }
 
-type Tooltip = { x: number; y: number; label: string };
-
 export function MarkovGraphView() {
   const [data, setData] = useState<MarkovGraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
-
-  const showTooltip = (e: ReactMouseEvent, label: string) =>
-    setTooltip({ x: e.clientX, y: e.clientY, label });
-  const hideTooltip = () => setTooltip(null);
+  const { tooltip, showTooltip, hideTooltip } = useGraphTooltip();
 
   useEffect(() => {
     fetch("/api/markov-graph", { cache: "no-store" })
@@ -240,11 +235,7 @@ export function MarkovGraphView() {
         probabilidad; ↻ es la probabilidad de quedarse en el mismo estado. Pasá el mouse sobre una
         arista para ver el conteo exacto.
       </p>
-      {tooltip && (
-        <div className="graph-tooltip" style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}>
-          {tooltip.label}
-        </div>
-      )}
+      <GraphTooltip tooltip={tooltip} />
     </div>
   );
 }

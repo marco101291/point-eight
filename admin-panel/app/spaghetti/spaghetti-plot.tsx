@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useState } from "react";
+import { GraphTooltip, useGraphTooltip } from "@/app/_components/graph-tooltip";
 
 export type ScoredMatch = { id: string; compatibilityScore: number };
 
@@ -32,13 +33,11 @@ const MARGIN = { top: 16, right: 16, bottom: 32, left: 40 };
 const PLOT_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
 const PLOT_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
 
-type Tooltip = { x: number; y: number; label: string };
-
 export function SpaghettiPlot({ matches }: { matches: ScoredMatch[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(matches[0]?.id ?? null);
   const [data, setData] = useState<MatchTrajectories | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+  const { tooltip, showTooltip, hideTooltip } = useGraphTooltip();
 
   useEffect(() => {
     if (!selectedId) return;
@@ -48,9 +47,13 @@ export function SpaghettiPlot({ matches }: { matches: ScoredMatch[] }) {
     setData(null);
     setError(null);
     fetch(`/api/matches/${selectedId}/trajectories`, { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<MatchTrajectories>;
+      .then(async (res) => {
+        // Read the body once regardless of status: the proxy's error responses carry a Spanish
+        // `error` message (backend-proxy.ts) that's already the right thing to show, rather than
+        // a generic status code re-guessed at render time.
+        const body = await res.json();
+        if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+        return body as MatchTrajectories;
       })
       .then((json) => {
         if (!cancelled) setData(json);
@@ -71,10 +74,6 @@ export function SpaghettiPlot({ matches }: { matches: ScoredMatch[] }) {
       </p>
     );
   }
-
-  const showTooltip = (e: ReactMouseEvent, label: string) =>
-    setTooltip({ x: e.clientX, y: e.clientY, label });
-  const hideTooltip = () => setTooltip(null);
 
   const maxDay = data
     ? Math.max(1, ...data.trajectories.flatMap((t) => t.points.map((p) => p.day)))
@@ -98,7 +97,7 @@ export function SpaghettiPlot({ matches }: { matches: ScoredMatch[] }) {
         ))}
       </ul>
 
-      {error && <p className="lede">{error === "HTTP 404" ? "Sin simulaciones para este match." : `El Motor no respondió: ${error}`}</p>}
+      {error && <p className="lede">{error}</p>}
       {!error && !data && <p className="lede">Cargando…</p>}
 
       {data && (
@@ -164,11 +163,7 @@ export function SpaghettiPlot({ matches }: { matches: ScoredMatch[] }) {
         </>
       )}
 
-      {tooltip && (
-        <div className="graph-tooltip" style={{ left: tooltip.x + 14, top: tooltip.y + 14 }}>
-          {tooltip.label}
-        </div>
-      )}
+      <GraphTooltip tooltip={tooltip} />
     </div>
   );
 }
