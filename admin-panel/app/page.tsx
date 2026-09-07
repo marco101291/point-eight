@@ -60,6 +60,9 @@ export default async function Home() {
       <p className="nav">
         <Link href="/compound">El Compound →</Link>
       </p>
+      <p className="nav">
+        <Link href="/live">El Sistema Decidiendo →</Link>
+      </p>
     </main>
   );
 }

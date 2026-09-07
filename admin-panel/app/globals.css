@@ -60,6 +60,12 @@ h1 { font-size: 20px; font-weight: normal; letter-spacing: 1px; }
 .spaghetti-plot { width: 100%; height: auto; margin-top: 24px; }
 .compound-graph { width: 100%; height: auto; margin-top: 24px; }
 
+.event-feed { list-style: none; padding: 0; margin: 24px 0 0; border-top: 1px solid var(--line); }
+.event { display: flex; gap: 16px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.event-time { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.event.assigned .event-text { color: var(--ok); }
+.event.expired .event-text { color: var(--down); }
+
 .match-picker { list-style: none; padding: 0; margin: 32px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .match-picker button {
   background: none;
