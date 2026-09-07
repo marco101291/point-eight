@@ -7,7 +7,9 @@ spring:
     password: ${SYSTEM_DB_PASSWORD:pointeight}
   jpa:
     hibernate:
-      ddl-auto: ${SYSTEM_DB_DDL:update}
+      # Flyway (db/migration) owns the schema now, DEC-019 — validate just checks the entities
+      # agree with it, it never creates or alters anything.
+      ddl-auto: ${SYSTEM_DB_DDL:validate}
     open-in-view: false
     properties:
       hibernate:

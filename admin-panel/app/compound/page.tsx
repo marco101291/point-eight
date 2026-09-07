@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { isTruncated, systemBaseUrl } from "@/app/_lib/backend";
 import { CompoundGraph, type CompoundUser, type CompoundMatch } from "./compound-graph";
 
 export const dynamic = "force-dynamic";
@@ -33,11 +34,10 @@ type LoadResult =
 const FETCH_SIZE = 500;
 
 async function loadCompound(): Promise<LoadResult> {
-  const system = process.env.SYSTEM_BASE_URL ?? "http://localhost:8080";
   try {
     const [usersRes, matchesRes] = await Promise.all([
-      fetch(`${system}/api/users?size=${FETCH_SIZE}`, { cache: "no-store" }),
-      fetch(`${system}/api/matches?size=${FETCH_SIZE}`, { cache: "no-store" }),
+      fetch(`${systemBaseUrl()}/api/users?size=${FETCH_SIZE}`, { cache: "no-store" }),
+      fetch(`${systemBaseUrl()}/api/matches?size=${FETCH_SIZE}`, { cache: "no-store" }),
     ]);
     if (!usersRes.ok) return { ok: false, error: `usuarios: HTTP ${usersRes.status}` };
     if (!matchesRes.ok) return { ok: false, error: `matches: HTTP ${matchesRes.status}` };
@@ -65,8 +65,7 @@ async function loadCompound(): Promise<LoadResult> {
         compatibilityScore: m.compatibilityScore,
       }));
 
-    const truncated = usersPage.total > users.length || matchesPage.total > matchesPage.content.length;
-    return { ok: true, users, matches, truncated };
+    return { ok: true, users, matches, truncated: isTruncated(usersPage, matchesPage) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "sin respuesta" };
   }

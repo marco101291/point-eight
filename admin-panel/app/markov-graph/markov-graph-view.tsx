@@ -1,16 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  forceCenter,
-  forceCollide,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  type SimulationLinkDatum,
-  type SimulationNodeDatum,
-} from "d3-force";
+import type { SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import { GraphTooltip, useGraphTooltip } from "@/app/_components/graph-tooltip";
+import { runForceLayout } from "@/app/_components/force-layout";
 
 type MarkovTransition = {
   fromState: string;
@@ -57,21 +50,14 @@ function layout(states: string[], crossLinks: MarkovTransition[]): GraphNode[] {
     probability: t.probability,
   }));
 
-  const simulation = forceSimulation(nodes)
-    .force(
-      "link",
-      forceLink<GraphNode, GraphLink>(links)
-        .id((d) => d.id)
-        .distance((d) => 220 - 160 * d.probability),
-    )
-    .force("charge", forceManyBody().strength(-450))
-    .force("center", forceCenter(WIDTH / 2, HEIGHT / 2))
-    .force("collide", forceCollide(NODE_RADIUS + 12))
-    .stop();
-
   // Run to completion synchronously: 5 static states settle in well under 300 ticks, and there's
   // no reason to animate a graph that never changes after this render.
-  for (let i = 0; i < 300; i++) simulation.tick();
+  runForceLayout(nodes, links, {
+    linkDistance: (d) => 220 - 160 * d.probability,
+    chargeStrength: -450,
+    center: [WIDTH / 2, HEIGHT / 2],
+    collideRadius: NODE_RADIUS + 12,
+  });
 
   return nodes;
 }
