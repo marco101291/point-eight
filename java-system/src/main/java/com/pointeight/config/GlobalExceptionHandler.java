@@ -1,5 +1,7 @@
 package com.pointeight.config;
 
+import com.pointeight.auth.domain.EmailAlreadyRegisteredException;
+import com.pointeight.auth.domain.InvalidCredentialsException;
 import com.pointeight.match.application.UserAlreadyMatchedException;
 import com.pointeight.match.domain.IllegalMatchTransitionException;
 import com.pointeight.shared.domain.ResourceNotFoundException;
@@ -21,6 +23,8 @@ public class GlobalExceptionHandler {
   private static final URI NOT_FOUND = URI.create("urn:pointeight:not-found");
   private static final URI ILLEGAL_TRANSITION = URI.create("urn:pointeight:illegal-transition");
   private static final URI ALREADY_MATCHED = URI.create("urn:pointeight:already-matched");
+  private static final URI EMAIL_TAKEN = URI.create("urn:pointeight:email-already-registered");
+  private static final URI INVALID_CREDENTIALS = URI.create("urn:pointeight:invalid-credentials");
   private static final URI INVALID_REQUEST = URI.create("urn:pointeight:invalid-request");
   private static final URI ENGINE_UNAVAILABLE = URI.create("urn:pointeight:engine-unavailable");
 
@@ -42,6 +46,16 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(UserAlreadyMatchedException.class)
   public ProblemDetail onAlreadyMatched(UserAlreadyMatchedException e) {
     return problem(HttpStatus.CONFLICT, "User already matched", e.getMessage(), ALREADY_MATCHED);
+  }
+
+  @ExceptionHandler(EmailAlreadyRegisteredException.class)
+  public ProblemDetail onEmailAlreadyRegistered(EmailAlreadyRegisteredException e) {
+    return problem(HttpStatus.CONFLICT, "Email already registered", e.getMessage(), EMAIL_TAKEN);
+  }
+
+  @ExceptionHandler(InvalidCredentialsException.class)
+  public ProblemDetail onInvalidCredentials(InvalidCredentialsException e) {
+    return problem(HttpStatus.UNAUTHORIZED, "Invalid credentials", e.getMessage(), INVALID_CREDENTIALS);
   }
 
   @ExceptionHandler(CompatibilityEngineException.class)

@@ -9,8 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pointeight.auth.application.RegisterAccountUseCase;
 import com.pointeight.user.application.DeleteUserUseCase;
-import com.pointeight.user.application.RegisterUserUseCase;
 import com.pointeight.user.application.UpdateUserProfileUseCase;
 import com.pointeight.user.application.UserQueries;
 import com.pointeight.user.domain.AttachmentStyle;
@@ -31,6 +31,7 @@ import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -43,6 +44,11 @@ import org.springframework.test.web.servlet.MockMvc;
  * the real JSON the endpoint returns.
  */
 @WebMvcTest(UserController.class)
+// SecurityConfig (com.pointeight.config) isn't picked up by this slice — @WebMvcTest only scans
+// web-layer beans, not arbitrary @Configuration classes — so without this, Spring Boot's security
+// auto-configuration falls back to its own default filter chain and every request 401s before it
+// ever reaches the controller this test actually cares about.
+@AutoConfigureMockMvc(addFilters = false)
 class UserControllerTest {
 
   /** Names that must never appear in a response. */
@@ -63,7 +69,7 @@ class UserControllerTest {
   @Autowired private MockMvc mockMvc;
   @Autowired private ObjectMapper objectMapper;
 
-  @MockBean private RegisterUserUseCase registerUser;
+  @MockBean private RegisterAccountUseCase registerAccount;
   @MockBean private UpdateUserProfileUseCase updateProfile;
   @MockBean private DeleteUserUseCase deleteUser;
   @MockBean private UserQueries queries;
@@ -108,11 +114,13 @@ class UserControllerTest {
   @Test
   @DisplayName("registration accepts Layer 2 but doesn't return it")
   void elAltaNoDevuelveCapa2() throws Exception {
-    when(registerUser.execute(any(), any())).thenReturn(sampleUser());
+    when(registerAccount.execute(any(), any(), any(), any())).thenReturn(sampleUser());
 
     String requestBody =
         """
         {
+          "email": "user@example.com",
+          "password": "hunter2hunter2",
           "age": 31,
           "gender": "FEMALE",
           "seekingGenders": ["MALE"],
@@ -205,8 +213,9 @@ class UserControllerTest {
     String body =
         objectMapper.writeValueAsString(
             new RegisterUserRequest(
-                17, Gender.MALE, Set.of(Gender.FEMALE), SeekingType.CASUAL, "Córdoba", "docente",
-                List.of(), null, null, null, null, null, null, null, null));
+                "user@example.com", "hunter2hunter2", 17, Gender.MALE, Set.of(Gender.FEMALE),
+                SeekingType.CASUAL, "Córdoba", "docente", List.of(), null, null, null, null, null,
+                null, null, null));
 
     mockMvc
         .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(body))

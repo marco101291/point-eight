@@ -33,6 +33,11 @@ management:
       show-details: always
 
 pointeight:
+  auth:
+    # Dev-only default — override with a real secret (>= 32 bytes, HS256 needs 256 bits) outside
+    # local development. Self-issued and self-validated (DEC-022): no external identity provider.
+    jwt-secret: ${JWT_SECRET:dev-only-jwt-secret-change-in-production-0123456789ABCDEF}
+    token-ttl-hours: ${JWT_TOKEN_TTL_HOURS:24}
   engine:
     base-url: ${ENGINE_BASE_URL:http://localhost:8000}
   match:
