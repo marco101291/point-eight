@@ -6,7 +6,7 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-020`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-021`).
 C4 diagrams: [`docs/c4.md`](docs/c4.md).
 
 ---
@@ -37,6 +37,7 @@ React/Next.js.
 | **M4** Async + events | ✅ | Candidate `Specification`/`Strategy` (`DEC-014`), `MatchExpiredEvent` auto-rematches both users (`AFTER_COMMIT` + `REQUIRES_NEW`, `DEC-015`), real `collapse_probability(ratio)`, scoring moved to fire-and-forget RabbitMQ (`DEC-016`). 99 Java tests, 39 Python tests |
 | **M5** Admin panel | ✅ | `SimulationRun` persistence (`DEC-017`); Markov graph, spaghetti plot, force-directed compound graph (all `d3-force`, `DEC-018`); live "the System deciding" feed polling `GET /api/events`. 104 Java tests, 52 Python tests |
 | **M6** Polish | ✅ | Engine endpoint tests against real Postgres via `testcontainers` (`DEC-019`); `java-system` migrates to Flyway, `ddl-auto: validate` (`DEC-020`); C4 context + container diagrams (`docs/c4.md`). 104 Java tests, 55 Python tests |
+| **M7** Mobile client | 🚧 | Not in the original spec — added after M4 (see `docs/architecture.md`'s Open questions). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, one reveal screen (Layer 1 + photo, mock data — no name field, same invariant as everywhere else). Still needed: auth (doesn't exist anywhere in the system yet), a photo field on `Profile`, the real reveal endpoint, push notifications on `MatchStatus → ACTIVE` |
 
 Inventory: 86 Java files (main), 18 test, 23 Python, 15 TS.
 
@@ -171,6 +172,10 @@ Code comments and documentation **in English**. Code identifiers, in English.
   with it. When changing a JPA entity, add a new `V{n}__description.sql` migration — Hibernate
   won't create or alter anything by itself anymore.
 - **`seekingGenders` is a `Set<Gender>`**, even though the doc writes it in the singular (`DEC-005`).
+- **`mobile-client` needs `legacy-peer-deps=true`** (already set in its own `.npmrc`). `expo-router`
+  declares optional web-only peers (`@radix-ui/react-tabs`, `vaul`, `react-dom`) that conflict under
+  npm's strict resolver even for a mobile-only app that never touches the web target — plain
+  `npm install` fails with `ERESOLVE` without it.
 
 ---
 

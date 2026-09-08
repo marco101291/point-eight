@@ -315,6 +315,51 @@ only tables/columns/types, so renaming them costs nothing. `matches` still has n
 the Match aggregate references `UserId` only, no JPA relationship (`DEC-004`), and this baseline
 preserves that rather than quietly introducing a constraint the domain never actually declared.
 
+### DEC-021 — Mobile client: React Native + Expo, reveal-only, no accept/reject
+Not in the original spec (`hang-the-dj-sim.md` never mentions a mobile client at all) — decided
+during M4's PR discussion, scoped for real once M5/M6 wrapped. A minimal **native** mobile client
+for the person being matched (not an admin tool): a single "reveal" screen once a match activates,
+showing the other person's photo and Layer 1 profile (age, city, profession, hobbies — never Layer
+2, never a name, since the domain has none). No accept/reject step: that would contradict the
+project's central premise that the System assigns unilaterally, no swiping or profile selection.
+
+React Native + Expo over Swift/Flutter or a bare RN setup, for the same reason CLAUDE.md already
+assumes React/Next.js familiarity elsewhere: it reuses that background directly, and Expo gets push
+notifications (`expo-notifications`) without an App Store-only iOS build. `mobile-client/`, Expo SDK
+57, **Expo Router** (file-based, not a plain `App.tsx` entry) rather than React Navigation's
+imperative tree — deliberately chosen for the same reason as the framework itself: it's the same
+mental model as Next.js's App Router, so it transfers rather than being a second routing paradigm
+to learn. `expo-image` over React Native's core `Image` for the photo (better caching/perf for
+exactly this kind of photo-heavy screen) and `expo-linear-gradient` for the reveal overlay.
+
+First block (this one) is the screen alone, hardcoded mock data — no backend integration yet. That
+exposed a real prerequisite gap: **there is no authentication anywhere in the system.** Without it,
+"show this phone's user their active match" has no way to know which user the phone belongs to.
+Decided to build minimal real auth (not a client-side "pick your persona" placeholder) as its own
+upcoming block, before wiring the app to `java-system` for real — a placeholder would need
+replacing later anyway, and this is a genuine, contained piece of backend learning (basic Spring
+Security) in its own right.
+
+Known groundwork identified but not yet built: `Profile` has no photo field; a new endpoint
+exposing Layer 1 + photo for a user's *active* match only, with the Layer 2 non-leak invariant
+preserved the same structural way `UserResponse` already does it; a push-notification trigger point
+wherever a match transitions to `ACTIVE` (today `Match.activate()` records no domain event at all —
+unlike `propose()`/`expire()`, nothing observes this transition yet).
+
+**Two sub-questions raised at the same time, still open, revisit once auth and the reveal endpoint
+exist:**
+- Where Layer 2 actually comes from in-fiction, once there's a real client: `User.recalibrate()`
+  (M1, unused since) hints at the intended shape — a `TraitDerivation` baseline at registration,
+  then ongoing recalibration from indirect post-date signals collected through the app (never an
+  explicit "rate your date" prompt, since the user must never knowingly shape their own Layer 2).
+- How to detect the *actual date* ending (the in-person meeting), not just the match's assigned
+  window expiring — those aren't the same thing. GPS co-presence detection is the most narratively
+  honest option but a large privacy/battery cost; treating `ACTIVE → EXPIRED` as an approximate
+  proxy is far cheaper but conflates "the window closed" with "they actually met." Rejected: a fixed
+  polling cadence (e.g. checking in 2x/day) — it reads as overt surveillance rather than organic
+  signal collection, which undermines the same "unilateral, unnoticed observation" premise the
+  System is built on.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
