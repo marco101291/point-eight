@@ -360,6 +360,54 @@ exist:**
   signal collection, which undermines the same "unilateral, unnoticed observation" premise the
   System is built on.
 
+### DEC-022 — Minimal authentication: JWT, `Account` separate from `User`
+DEC-021 exposed a real prerequisite for the mobile client: **there was no authentication anywhere
+in the system.** Built as its own four-block sequence rather than one change, since it touches
+domain modeling, an existing endpoint's contract, and a new cross-cutting HTTP concern:
+
+1. **`Account`, not fields on `User`.** Login identity and the dating profile that gets matched
+   have different lifecycles — the same reasoning that already keeps Layer 1 and Layer 2 apart
+   inside `User`. `Account` (`com.pointeight.auth`) is keyed by `UserId` directly (no surrogate id
+   of its own: it's a one-to-one detail of a user, not an aggregate), with its own `Email` and
+   `HashedPassword` Value Objects. `accounts` has a real FK to `users` — unlike `matches` (DEC-004,
+   no FK, cross-aggregate reference only), this is a true one-to-one composition. Registration is
+   orchestrated in `auth.application.RegisterAccountUseCase`, not inside `user`'s own
+   `RegisterUserUseCase`: it calls that use case and then creates the linked `Account`, in one
+   `@Transactional`, so `user` never needs to know `auth` exists. The email-uniqueness check runs
+   *before* creating the `User`, so a duplicate email can't leave an orphaned profile behind.
+2. **JWT, self-issued and self-validated** (`jjwt`, not Spring Security's OAuth2 Resource Server
+   module, which assumes trusting an external JWK endpoint this system doesn't have). A `TokenIssuer`
+   port keeps the domain/application layers oblivious to JWT specifically; `JwtTokenIssuer` signs
+   with a shared HMAC secret (`pointeight.auth.jwt-secret`, dev default in `application.yml`,
+   override via `JWT_SECRET` outside local dev), subject = `UserId`, 24h expiry by default.
+3. **`JwtAuthenticationFilter`** (`OncePerRequestFilter`) reads `Authorization: Bearer`, and — if
+   the signature and expiry check out — populates `SecurityContext`. It never rejects a request
+   itself; a missing or invalid token just leaves the request unauthenticated, and whether that's a
+   problem is `SecurityConfig`'s `authorizeHttpRequests` decision per endpoint, not this filter's.
+4. **`GET /api/auth/me`**, the first (and today, only) endpoint requiring a valid token — not
+   because it's needed on its own, but because "the filter works" needs *something* real to prove
+   it against, and the actual reveal endpoint doesn't exist yet. It also happens to be a genuinely
+   useful pattern going forward: a client can check whether its stored token is still valid without
+   touching a real resource.
+
+**Everything else stays wide open on purpose.** Merely adding `spring-boot-starter-security` to the
+classpath makes Spring Boot lock down every endpoint with HTTP Basic and a random generated
+password by default; `SecurityConfig` replaces that with an explicit `permitAll()` for everything
+except `/api/auth/me`, so the admin panel and every existing endpoint keep working unauthenticated
+exactly as before. The reveal endpoint is meant to join `authenticated()` once it exists, not to
+trigger locking down the rest of the API.
+
+**Two bugs found and fixed via real Docker verification, not caught by the unit tests:**
+- `@WebMvcTest(UserController.class)` started failing with 401s the moment `spring-boot-starter-
+  security` landed on the classpath: that test slice doesn't scan `SecurityConfig` (a plain
+  `@Configuration`, outside a `@WebMvcTest`'s narrow bean scan), so Spring Boot's own default
+  security auto-configuration filled the gap instead. Fixed with `@AutoConfigureMockMvc(addFilters
+  = false)` — that test is about controller/validation behavior, not security.
+- Spring Security's own default response to a request with no credentials at all against a
+  protected endpoint is **403 Forbidden**, not 401 — semantically wrong (401 means "say who you
+  are", 403 means "I know who you are and it's not enough"). Fixed with a one-line
+  `authenticationEntryPoint` that sends a bare 401 instead of Spring's default.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or

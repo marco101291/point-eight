@@ -6,7 +6,7 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-021`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-022`).
 C4 diagrams: [`docs/c4.md`](docs/c4.md).
 
 ---
@@ -37,9 +37,9 @@ React/Next.js.
 | **M4** Async + events | ✅ | Candidate `Specification`/`Strategy` (`DEC-014`), `MatchExpiredEvent` auto-rematches both users (`AFTER_COMMIT` + `REQUIRES_NEW`, `DEC-015`), real `collapse_probability(ratio)`, scoring moved to fire-and-forget RabbitMQ (`DEC-016`). 99 Java tests, 39 Python tests |
 | **M5** Admin panel | ✅ | `SimulationRun` persistence (`DEC-017`); Markov graph, spaghetti plot, force-directed compound graph (all `d3-force`, `DEC-018`); live "the System deciding" feed polling `GET /api/events`. 104 Java tests, 52 Python tests |
 | **M6** Polish | ✅ | Engine endpoint tests against real Postgres via `testcontainers` (`DEC-019`); `java-system` migrates to Flyway, `ddl-auto: validate` (`DEC-020`); C4 context + container diagrams (`docs/c4.md`). 104 Java tests, 55 Python tests |
-| **M7** Mobile client | 🚧 | Not in the original spec — added after M4 (see `docs/architecture.md`'s Open questions). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, one reveal screen (Layer 1 + photo, mock data — no name field, same invariant as everywhere else). Still needed: auth (doesn't exist anywhere in the system yet), a photo field on `Profile`, the real reveal endpoint, push notifications on `MatchStatus → ACTIVE` |
+| **M7** Mobile client | 🚧 | Not in the original spec — added after M4 (`DEC-021`, `DEC-022`). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, one reveal screen (Layer 1 + photo, mock data — no name field, same invariant as everywhere else). Minimal auth built in `java-system` (`com.pointeight.auth`): `Account` separate from `User`, JWT login (`POST /api/auth/login`), `JwtAuthenticationFilter`, `GET /api/auth/me` — the only endpoint that requires a token so far, everything else stays open. Still needed: a photo field on `Profile`, the real reveal endpoint (protected by the same filter), push notifications on `MatchStatus → ACTIVE`. 124 Java tests |
 
-Inventory: 86 Java files (main), 18 test, 23 Python, 15 TS.
+Inventory: 108 Java files (main), 24 test, 23 Python, 20 TS (18 admin-panel, 2 mobile-client).
 
 **The Python Engine runs a real simulation**, but the wire contract still says
 `modelVersion: "v0"` — bumping it to `"v1"` needs a matching one-line change in
@@ -187,4 +187,7 @@ the Engine keeps a replica of profiles or receives them in the payload (M4), who
 but never moves). The Java → Python payload format was resolved in M2 as `DEC-009`; `SimulationRun`
 persistence was resolved in M5 as `DEC-017`; M5's three visualizations and live feed as `DEC-018`
 — the scoring cycle joining that feed is still open. M6 resolved the engine's DB-backed test
-strategy as `DEC-019` and the move off `ddl-auto` as `DEC-020`.
+strategy as `DEC-019` and the move off `ddl-auto` as `DEC-020`. M7 resolved the mobile client's
+stack and scope as `DEC-021`, and minimal authentication (`Account` separate from `User`, JWT) as
+`DEC-022` — the reveal endpoint joining `authenticated()` is still open, along with both
+sub-questions `DEC-021` raised (Layer 2 sourcing, date-end detection).
