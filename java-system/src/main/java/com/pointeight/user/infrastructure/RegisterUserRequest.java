@@ -7,19 +7,28 @@ import com.pointeight.user.domain.Profile;
 import com.pointeight.user.domain.SeekingType;
 import com.pointeight.user.domain.SimulationParameters;
 import com.pointeight.user.domain.TraitDerivation;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.Set;
 
 /**
  * User registration. Layer 2 fields are optional and <b>write-only</b>: they're accepted here, but
  * no DTO ever returns them. If they're not provided, the System derives them from the profile.
+ *
+ * <p>{@code email}/{@code password} are login credentials (DEC-022), not part of {@link Profile}
+ * — this record stays oblivious to {@code auth.domain.Email}/{@code HashedPassword}, since
+ * {@code RegisterAccountUseCase} is the only thing that needs to know both this DTO and those
+ * types exist.
  */
 public record RegisterUserRequest(
+    @NotBlank @Email String email,
+    @NotBlank @Size(min = 8) String password,
     @Min(18) @Max(120) int age,
     @NotNull Gender gender,
     @NotEmpty Set<Gender> seekingGenders,
@@ -27,6 +36,7 @@ public record RegisterUserRequest(
     @NotBlank String city,
     @NotBlank String profession,
     List<String> hobbies,
+    @NotBlank String photoUrl,
     // --- Layer 2, optional ---
     AttachmentStyle attachmentStyle,
     Double attachmentIntensity,
@@ -38,7 +48,8 @@ public record RegisterUserRequest(
     Double commitmentPaceExpectation) {
 
   public Profile toProfile() {
-    return new Profile(age, gender, seekingGenders, seekingType, city, profession, hobbies);
+    return new Profile(
+        age, gender, seekingGenders, seekingType, city, profession, hobbies, photoUrl);
   }
 
   /**

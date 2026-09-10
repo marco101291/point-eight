@@ -23,6 +23,7 @@ public record UserResponse(
     String city,
     String profession,
     List<String> hobbies,
+    String photoUrl,
     double cumulativeConfidenceScore,
     Instant createdAt,
     Instant updatedAt) {
@@ -37,6 +38,7 @@ public record UserResponse(
         user.profile().city(),
         user.profile().profession(),
         user.profile().hobbies(),
+        user.profile().photoUrl(),
         user.cumulativeConfidenceScore().value(),
         user.createdAt(),
         user.updatedAt());

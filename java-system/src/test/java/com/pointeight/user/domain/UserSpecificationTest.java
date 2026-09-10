@@ -13,7 +13,7 @@ class UserSpecificationTest {
       User.register(
           new Profile(
               30, Gender.FEMALE, Set.of(Gender.MALE), SeekingType.LONG_TERM, "Madrid",
-              "arquitecta", List.of()),
+              "arquitecta", List.of(), "https://picsum.photos/seed/test/900/1400"),
           null,
           Clock.systemUTC());
 

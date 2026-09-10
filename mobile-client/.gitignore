@@ -1,0 +1,49 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Firebase (M7/DEC-024, push notifications) — google-services.json is deliberately NOT here:
+# it's client-side config with no real secret in it (Google's own guidance says it's safe to
+# check in — the API key inside is restricted by package name/SHA fingerprint, not a bearer
+# credential), and EAS Build only uploads files git tracks, so gitignoring it silently breaks
+# every build ("google-services.json is missing" even though it's sitting right there locally).
+# The actual secret (the Firebase service account key for server-side FCM) never touches this
+# repo at all — it's uploaded straight to EAS via `eas credentials`.
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android

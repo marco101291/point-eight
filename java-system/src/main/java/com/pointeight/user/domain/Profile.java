@@ -14,7 +14,8 @@ public record Profile(
     SeekingType seekingType,
     String city,
     String profession,
-    List<String> hobbies) {
+    List<String> hobbies,
+    String photoUrl) {
 
   private static final int MIN_AGE = 18;
   private static final int MAX_AGE = 120;
@@ -36,10 +37,14 @@ public record Profile(
     if (profession == null || profession.isBlank()) {
       throw new IllegalArgumentException("profession is required");
     }
+    if (photoUrl == null || photoUrl.isBlank()) {
+      throw new IllegalArgumentException("photoUrl is required");
+    }
     seekingType = seekingType == null ? SeekingType.UNDEFINED : seekingType;
     seekingGenders = Set.copyOf(seekingGenders);
     hobbies = hobbies == null ? List.of() : List.copyOf(hobbies);
     city = city.trim();
     profession = profession.trim();
+    photoUrl = photoUrl.trim();
   }
 }

@@ -4,6 +4,7 @@ import com.pointeight.match.application.CreateManualMatchUseCase;
 import com.pointeight.match.application.MatchLifecycleUseCases;
 import com.pointeight.match.application.MatchQueries;
 import com.pointeight.match.application.RequestCompatibilityScoreUseCase;
+import com.pointeight.match.application.RevealActiveMatchUseCase;
 import com.pointeight.match.domain.MatchId;
 import com.pointeight.match.domain.MatchStatus;
 import com.pointeight.shared.infrastructure.PageResponse;
@@ -12,6 +13,7 @@ import jakarta.validation.Valid;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,6 +32,7 @@ public class MatchController {
   private final MatchLifecycleUseCases lifecycle;
   private final RequestCompatibilityScoreUseCase requestScore;
   private final MatchQueries queries;
+  private final RevealActiveMatchUseCase reveal;
   private final Duration defaultExpiry;
 
   public MatchController(
@@ -37,11 +40,13 @@ public class MatchController {
       MatchLifecycleUseCases lifecycle,
       RequestCompatibilityScoreUseCase requestScore,
       MatchQueries queries,
+      RevealActiveMatchUseCase reveal,
       @Value("${pointeight.match.default-expiry-seconds}") long defaultExpirySeconds) {
     this.createMatch = createMatch;
     this.lifecycle = lifecycle;
     this.requestScore = requestScore;
     this.queries = queries;
+    this.reveal = reveal;
     this.defaultExpiry = Duration.ofSeconds(defaultExpirySeconds);
   }
 
@@ -69,6 +74,16 @@ public class MatchController {
   @GetMapping("/{id}")
   public MatchResponse byId(@PathVariable String id) {
     return MatchResponse.from(queries.byId(MatchId.of(id)));
+  }
+
+  /**
+   * The mobile client's reveal screen (DEC-021): the caller's identity comes only from the JWT
+   * ({@code SecurityConfig} requires one here), never from a path parameter — nobody can reveal
+   * anyone else's match this way. 404 via {@code NoActiveMatchException} when there isn't one.
+   */
+  @GetMapping("/me/reveal")
+  public RevealResponse revealActiveMatch(Authentication authentication) {
+    return RevealResponse.from(reveal.execute(UserId.of(authentication.getName())));
   }
 
   @PostMapping("/{id}/activate")

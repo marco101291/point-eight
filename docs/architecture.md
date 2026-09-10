@@ -315,6 +315,223 @@ only tables/columns/types, so renaming them costs nothing. `matches` still has n
 the Match aggregate references `UserId` only, no JPA relationship (`DEC-004`), and this baseline
 preserves that rather than quietly introducing a constraint the domain never actually declared.
 
+### DEC-021 — Mobile client: React Native + Expo, reveal-only, no accept/reject
+Not in the original spec (`hang-the-dj-sim.md` never mentions a mobile client at all) — decided
+during M4's PR discussion, scoped for real once M5/M6 wrapped. A minimal **native** mobile client
+for the person being matched (not an admin tool): a single "reveal" screen once a match activates,
+showing the other person's photo and Layer 1 profile (age, city, profession, hobbies — never Layer
+2, never a name, since the domain has none). No accept/reject step: that would contradict the
+project's central premise that the System assigns unilaterally, no swiping or profile selection.
+
+React Native + Expo over Swift/Flutter or a bare RN setup, for the same reason CLAUDE.md already
+assumes React/Next.js familiarity elsewhere: it reuses that background directly, and Expo gets push
+notifications (`expo-notifications`) without an App Store-only iOS build. `mobile-client/`, Expo SDK
+57, **Expo Router** (file-based, not a plain `App.tsx` entry) rather than React Navigation's
+imperative tree — deliberately chosen for the same reason as the framework itself: it's the same
+mental model as Next.js's App Router, so it transfers rather than being a second routing paradigm
+to learn. `expo-image` over React Native's core `Image` for the photo (better caching/perf for
+exactly this kind of photo-heavy screen) and `expo-linear-gradient` for the reveal overlay.
+
+First block (this one) is the screen alone, hardcoded mock data — no backend integration yet. That
+exposed a real prerequisite gap: **there is no authentication anywhere in the system.** Without it,
+"show this phone's user their active match" has no way to know which user the phone belongs to.
+Decided to build minimal real auth (not a client-side "pick your persona" placeholder) as its own
+upcoming block, before wiring the app to `java-system` for real — a placeholder would need
+replacing later anyway, and this is a genuine, contained piece of backend learning (basic Spring
+Security) in its own right.
+
+Known groundwork identified but not yet built: `Profile` has no photo field; a new endpoint
+exposing Layer 1 + photo for a user's *active* match only, with the Layer 2 non-leak invariant
+preserved the same structural way `UserResponse` already does it; a push-notification trigger point
+wherever a match transitions to `ACTIVE` (today `Match.activate()` records no domain event at all —
+unlike `propose()`/`expire()`, nothing observes this transition yet).
+
+**Update, once auth existed:** `Profile` gained `photoUrl` (`V3__profile_photo.sql`, required like
+every other Layer 1 field, backfilled for existing rows since it's `NOT NULL`). `GET
+/api/matches/me/reveal` is the real reveal endpoint — `RevealActiveMatchUseCase` (`match.application`,
+crosses into `UserRepository` the same way `RequestCompatibilityScoreUseCase` already does)
+resolves the caller's one ACTIVE match from the JWT subject, never a path parameter, and returns
+only the counterpart's `Profile`; `RevealResponse` declares just `age`/`city`/`profession`/
+`hobbies`/`photoUrl`, the same structural non-leak guarantee `UserResponse` uses for Layer 2, with
+no name field to leak either. `NoActiveMatchException` (`ResourceNotFoundException`, so it's a
+plain 404) covers "nothing to reveal yet." `SecurityConfig` now requires a token on this endpoint
+too, alongside `/api/auth/me`. The mobile client got a login screen and switched off mock data:
+`expo-secure-store` holds the JWT (falls back to `localStorage` under `expo start --web`, since
+SecureStore has no native backing there), and the reveal screen now has real loading/no-match/error
+states instead of a single hardcoded payload. Push notifications on activation are still open — no
+domain event exists for that transition yet, so there's nothing to trigger off of.
+
+**Two sub-questions raised at the same time, still open, revisit once auth and the reveal endpoint
+exist:**
+- Where Layer 2 actually comes from in-fiction, once there's a real client: `User.recalibrate()`
+  (M1, unused since) hints at the intended shape — a `TraitDerivation` baseline at registration,
+  then ongoing recalibration from indirect post-date signals collected through the app (never an
+  explicit "rate your date" prompt, since the user must never knowingly shape their own Layer 2).
+- How to detect the *actual date* ending (the in-person meeting), not just the match's assigned
+  window expiring — those aren't the same thing. GPS co-presence detection is the most narratively
+  honest option but a large privacy/battery cost; treating `ACTIVE → EXPIRED` as an approximate
+  proxy is far cheaper but conflates "the window closed" with "they actually met." Rejected: a fixed
+  polling cadence (e.g. checking in 2x/day) — it reads as overt surveillance rather than organic
+  signal collection, which undermines the same "unilateral, unnoticed observation" premise the
+  System is built on.
+
+### DEC-022 — Minimal authentication: JWT, `Account` separate from `User`
+DEC-021 exposed a real prerequisite for the mobile client: **there was no authentication anywhere
+in the system.** Built as its own four-block sequence rather than one change, since it touches
+domain modeling, an existing endpoint's contract, and a new cross-cutting HTTP concern:
+
+1. **`Account`, not fields on `User`.** Login identity and the dating profile that gets matched
+   have different lifecycles — the same reasoning that already keeps Layer 1 and Layer 2 apart
+   inside `User`. `Account` (`com.pointeight.auth`) is keyed by `UserId` directly (no surrogate id
+   of its own: it's a one-to-one detail of a user, not an aggregate), with its own `Email` and
+   `HashedPassword` Value Objects. `accounts` has a real FK to `users` — unlike `matches` (DEC-004,
+   no FK, cross-aggregate reference only), this is a true one-to-one composition. Registration is
+   orchestrated in `auth.application.RegisterAccountUseCase`, not inside `user`'s own
+   `RegisterUserUseCase`: it calls that use case and then creates the linked `Account`, in one
+   `@Transactional`, so `user` never needs to know `auth` exists. The email-uniqueness check runs
+   *before* creating the `User`, so a duplicate email can't leave an orphaned profile behind.
+2. **JWT, self-issued and self-validated** (`jjwt`, not Spring Security's OAuth2 Resource Server
+   module, which assumes trusting an external JWK endpoint this system doesn't have). A `TokenIssuer`
+   port keeps the domain/application layers oblivious to JWT specifically; `JwtTokenIssuer` signs
+   with a shared HMAC secret (`pointeight.auth.jwt-secret`, dev default in `application.yml`,
+   override via `JWT_SECRET` outside local dev), subject = `UserId`, 24h expiry by default.
+3. **`JwtAuthenticationFilter`** (`OncePerRequestFilter`) reads `Authorization: Bearer`, and — if
+   the signature and expiry check out — populates `SecurityContext`. It never rejects a request
+   itself; a missing or invalid token just leaves the request unauthenticated, and whether that's a
+   problem is `SecurityConfig`'s `authorizeHttpRequests` decision per endpoint, not this filter's.
+4. **`GET /api/auth/me`**, the first (and today, only) endpoint requiring a valid token — not
+   because it's needed on its own, but because "the filter works" needs *something* real to prove
+   it against, and the actual reveal endpoint doesn't exist yet. It also happens to be a genuinely
+   useful pattern going forward: a client can check whether its stored token is still valid without
+   touching a real resource.
+
+**Everything else stays wide open on purpose.** Merely adding `spring-boot-starter-security` to the
+classpath makes Spring Boot lock down every endpoint with HTTP Basic and a random generated
+password by default; `SecurityConfig` replaces that with an explicit `permitAll()` for everything
+except `/api/auth/me`, so the admin panel and every existing endpoint keep working unauthenticated
+exactly as before. The reveal endpoint is meant to join `authenticated()` once it exists, not to
+trigger locking down the rest of the API.
+
+**Two bugs found and fixed via real Docker verification, not caught by the unit tests:**
+- `@WebMvcTest(UserController.class)` started failing with 401s the moment `spring-boot-starter-
+  security` landed on the classpath: that test slice doesn't scan `SecurityConfig` (a plain
+  `@Configuration`, outside a `@WebMvcTest`'s narrow bean scan), so Spring Boot's own default
+  security auto-configuration filled the gap instead. Fixed with `@AutoConfigureMockMvc(addFilters
+  = false)` — that test is about controller/validation behavior, not security.
+- Spring Security's own default response to a request with no credentials at all against a
+  protected endpoint is **403 Forbidden**, not 401 — semantically wrong (401 means "say who you
+  are", 403 means "I know who you are and it's not enough"). Fixed with a one-line
+  `authenticationEntryPoint` that sends a bare 401 instead of Spring's default.
+
+### DEC-023 — Access/refresh token split, so logout actually revokes something
+
+DEC-022's JWT was self-issued and self-validated on purpose — nothing to check against a database
+on every request. That had a real, deliberately-accepted cost, and building the mobile client's
+logout button (M7) surfaced it directly: a self-validating JWT **can't be revoked before it
+expires**. "Logging out" was purely `SecureStore.deleteItemAsync` on the phone — the 24h token
+itself stayed valid the whole time if anyone else had a copy of it.
+
+Two ways to close that were on the table: a server-side blocklist of revoked token ids (checked on
+every request — reintroduces exactly the per-request database cost DEC-022 avoided, but is a small,
+contained change) or the industry-standard pattern (what Auth0/Firebase/Cognito/OAuth2 all
+actually do): a short-lived access token nobody bothers revoking, backed by a long-lived refresh
+token that's a real, deletable database row. Went with the latter — closer to what a real system
+would do, at the cost of `mobile-client` needing actual refresh logic, not just a bigger login
+screen.
+
+**The split:**
+- **Access token** (`JwtTokenIssuer`): still a JWT, still self-validated, just short now —
+  `pointeight.auth.access-token-ttl-minutes`, default 15. Nobody can kill one early; the whole
+  strategy is to make that window small enough not to matter.
+- **Refresh token** (`auth.domain.RefreshToken`): opaque (32 random bytes, base64url) — never a
+  JWT, since nothing needs to read claims out of it locally, only look it up by hash. Hashed at
+  rest (SHA-256, deterministic — the hash doubles as the lookup key) for the same reason
+  `HashedPassword` never stores a raw password: a leaked `refresh_tokens` row shouldn't hand out a
+  live credential. `pointeight.auth.refresh-token-ttl-days`, default 30. Deliberately *not* run
+  through `PasswordEncoder`/bcrypt like `Account`'s password — bcrypt's slow-by-design work factor
+  defends against offline guessing of a *low-entropy human password*; a 256-bit random token has no
+  guessing surface to defend against, so a fast, deterministic hash is the right tool, not the
+  wrong one reused out of habit.
+- **Rotation on every refresh** (`RefreshAccessTokenUseCase`), race-safe and with reuse detection:
+  every token belongs to a `familyId` (the lineage descended from one login), and rotating claims
+  the presented token atomically (`RefreshTokenRepository#claim`, a conditional `UPDATE ... WHERE
+  used_at IS NULL` — Postgres's own row locking, not a find-then-delete-then-insert from
+  application code, which is what makes two concurrent refreshes on the same token unable to both
+  "win"). A failed claim — the token was already used, whether that's a race against a concurrent
+  refresh or a stale token being replayed later — revokes the *whole family*
+  (`RefreshTokenRepository#deleteFamily`), not just the one token: nothing here can tell a benign
+  race from real theft, so both get treated as theft, and every descendant of that lineage is
+  forced back to a real login. See the Open questions entry on the one remaining nuance (the
+  concurrent case's outcome isn't fully deterministic; the delayed-replay case — the actual threat
+  this exists for — is).
+- **`POST /api/auth/logout`** (`LogoutUseCase`): deletes the refresh token. Idempotent — logging
+  out twice, or logging out a token that already rotated or expired, is not an error, since the
+  caller's actual goal ("this shouldn't work anymore") is already true either way.
+- **`POST /api/auth/refresh`**: deliberately *not* behind `SecurityConfig`'s `authenticated()` —
+  requiring a valid (non-expired) access token to refresh would defeat the one case that matters,
+  refreshing *after* it expired. The refresh token in the body is what proves identity here, the
+  same way the password does at `/login`.
+
+**What this doesn't fix:** the access token is still unrevokable inside its own 15-minute window —
+logout (or a compromised refresh token getting deleted) only stops *future* silent renewal, it
+doesn't retroactively kill a still-valid access token already in someone's hands. Accepted
+trade-off, not an oversight; closing that fully would mean going back to the per-request blocklist
+option this design specifically avoided.
+
+`mobile-client` follows: `login.tsx` and `lib/tokenStorage.ts` store both tokens; `lib/api.ts`'s
+`authenticatedFetch` retries a 401 exactly once after a silent refresh, and gives up (clearing both
+tokens, sending the user to `/login`) if the refresh itself fails; the logout button calls `POST
+/api/auth/logout` before clearing local state.
+
+### DEC-024 — Push notifications on `MatchStatus → ACTIVE`, and why `mobile-client` needs a development build now
+
+M7's last groundwork item: `Match.activate()` used to record no domain event at all, so nothing
+existed to trigger a notification from. Closing it turned up a real constraint worth recording
+before it cost debugging time later: **Expo Go has not supported remote push notifications since
+SDK 53** (local, device-scheduled notifications still work there; a server-triggered one does
+not). Since "the System notifies you, you do nothing" is the whole narrative point of this feature
+— a local notification would mean the app polling and notifying itself, which contradicts DEC-021's
+own "unilateral, unnoticed observation" premise the same way a fixed polling cadence for Layer 2
+signals was already rejected — the only faithful option is a real development build via EAS,
+installed instead of Expo Go on the test device. `mobile-client/eas.json` adds a `development`
+build profile (`developmentClient: true`) and `expo-dev-client`; actually running `eas login` /
+`eas build --profile development` needs the project owner's own Expo account, so that step doesn't
+happen from here.
+
+**The chain:** `Match.activate()` now records `MatchActivatedEvent` (mirroring `MatchAssignedEvent`/
+`MatchExpiredEvent`, and — like those — picked up by `RecentEventsFeed` for the live feed too).
+`MatchActivatedEventListener` (`match.infrastructure`) reacts `AFTER_COMMIT`, one call per user, via
+`NotifyMatchActivatedUseCase` — `REQUIRES_NEW` for the exact reason `AssignNextMatchUseCase`
+(`DEC-015`) already needs it: the calling transaction's `EntityManager` is on its way out by the
+time an `AFTER_COMMIT` listener runs. A push failure for one or both users is logged and swallowed,
+never rethrown — same reasoning `MatchExpiredEventListener` already applies to
+`AssignNextMatchUseCase`: the activation that already happened stays activated regardless.
+
+**Where the token lives:** `Account` (not a new aggregate) gained `registerPushToken` — one push
+token per account, overwritten on each registration (`V6__account_push_token.sql`, nullable: most
+accounts won't have one). A second device, or a reinstall, simply replaces the token on file rather
+than this project taking on multi-device fan-out and the receipt-driven cleanup of dead tokens that
+would come with modeling that properly. `POST /api/auth/push-token` (behind `authenticated()`,
+alongside `/me` and the reveal endpoint) is how a device registers one — `mobile-client`'s
+`lib/pushNotifications.ts` calls it after login and again on every launch already-authenticated,
+never assuming last session's token is still current.
+
+**What the notification says:** nothing about the match. No age, city, profession, and certainly no
+name (there isn't one anywhere in this system) — just enough to prompt opening the app. A push
+banner sits on the lock screen; Layer 1 has no business showing up there when the reveal screen's
+whole point is a gated, in-app moment.
+
+**A new outbound HTTP client, and why it's synchronous:** `push.infrastructure.
+ExpoPushNotificationSender` calls Expo's push service (`https://exp.host/--/api/v2/push/send`) via
+`RestClient` (Spring's, not a new dependency — `spring-boot-starter-web` already provides it; this
+is the first thing in the codebase to use it since M4 moved the Engine call to AMQP, `DEC-016`).
+Deliberately *not* pushed onto a queue the way scoring was: nothing here is on a request/response
+critical path a caller is blocked waiting on — the trigger is already an `AFTER_COMMIT` listener
+running outside any HTTP request. Verified against the real Expo endpoint (not mocked) with a
+fake token: the call succeeds at the HTTP level (Expo returns 200 with a per-message error in the
+body — `"DeviceNotRegistered"` — not an HTTP error status), confirming the whole chain fires
+correctly; only real on-device delivery is still unverified, pending the development build.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -343,3 +560,26 @@ preserves that rather than quietly introducing a constraint the domain never act
   `Duration.ofDays`), and no conversion rule between simulated days and real match-window time has
   ever been specified, here or in the spec doc. Needs that rule defined before it's implemented,
   not a unit coercion.
+- ~~`RefreshAccessTokenUseCase`'s rotation has a real race~~ and ~~no reuse-detection~~ — both
+  closed. `RefreshTokenRepository#claim` is now an atomic, conditional `UPDATE ... WHERE used_at IS
+  NULL`, so two concurrent `/refresh` calls on the same token can't both succeed; the loser calls
+  `deleteFamily` on the whole rotation lineage, so presenting an old, already-rotated token (a
+  delayed replay, not a race) reliably kills the current live session too, verified against real
+  Postgres. One documented, non-security nuance survives: in the *concurrent* case specifically
+  (not the delayed-replay one), whether the winner's brand-new token also gets caught by the
+  loser's family-wide delete depends on ordering — if the winner's `save` hasn't committed yet when
+  the loser's delete runs, the delete doesn't see it and the winner's session survives; if it has,
+  the winner is caught too and both sides end up back at login. Both outcomes are safe (worst case:
+  an extra unnecessary re-login), just not deterministic — tightening that further would mean
+  serializing the two paths (e.g. `SELECT ... FOR UPDATE` before the family delete), a real cost
+  for a benign-race edge case, not something this project's threat model calls for.
+  Getting the fix right also cost a detour worth remembering: the first version wrapped `claim` +
+  revoke-on-failure + throw in one `@Transactional` method, which either rolled back the revoke
+  (the exception undoes everything in its own transaction, including a delete that just ran) or, if
+  the revoke was moved to its own `REQUIRES_NEW` transaction, **deadlocked outright** — the
+  suspended parent transaction holds a lock the child needs to delete that same row, and the parent
+  can't resume to release it until the child returns. The actual fix was simpler than either: no
+  `@Transactional` on `RefreshAccessTokenUseCase.execute()` at all, with `@Transactional` moved
+  directly onto the individual `RefreshTokenJpaRepository` methods instead, so each repository call
+  commits independently the moment it returns — nothing left open to deadlock against, and nothing
+  to roll back a revoke that already happened.

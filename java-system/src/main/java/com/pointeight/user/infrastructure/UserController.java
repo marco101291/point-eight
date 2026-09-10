@@ -1,10 +1,12 @@
 package com.pointeight.user.infrastructure;
 
+import com.pointeight.auth.application.RegisterAccountUseCase;
+import com.pointeight.auth.domain.Email;
 import com.pointeight.shared.infrastructure.PageResponse;
 import com.pointeight.user.application.DeleteUserUseCase;
-import com.pointeight.user.application.RegisterUserUseCase;
 import com.pointeight.user.application.UpdateUserProfileUseCase;
 import com.pointeight.user.application.UserQueries;
+import com.pointeight.user.domain.User;
 import com.pointeight.user.domain.UserId;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,17 +27,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/users")
 public class UserController {
 
-  private final RegisterUserUseCase registerUser;
+  private final RegisterAccountUseCase registerAccount;
   private final UpdateUserProfileUseCase updateProfile;
   private final DeleteUserUseCase deleteUser;
   private final UserQueries queries;
 
   public UserController(
-      RegisterUserUseCase registerUser,
+      RegisterAccountUseCase registerAccount,
       UpdateUserProfileUseCase updateProfile,
       DeleteUserUseCase deleteUser,
       UserQueries queries) {
-    this.registerUser = registerUser;
+    this.registerAccount = registerAccount;
     this.updateProfile = updateProfile;
     this.deleteUser = deleteUser;
     this.queries = queries;
@@ -44,8 +46,13 @@ public class UserController {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public UserResponse register(@Valid @RequestBody RegisterUserRequest request) {
-    return UserResponse.from(
-        registerUser.execute(request.toProfile(), request.toSimulationParameters()));
+    User user =
+        registerAccount.execute(
+            new Email(request.email()),
+            request.password(),
+            request.toProfile(),
+            request.toSimulationParameters());
+    return UserResponse.from(user);
   }
 
   @GetMapping

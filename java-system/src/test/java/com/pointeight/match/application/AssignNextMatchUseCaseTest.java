@@ -54,7 +54,8 @@ class AssignNextMatchUseCaseTest {
 
   private static User userOf(Gender gender, Gender... seeking) {
     return User.register(
-        new Profile(30, gender, Set.of(seeking), SeekingType.LONG_TERM, "Madrid", "docente", List.of()),
+        new Profile(30, gender, Set.of(seeking), SeekingType.LONG_TERM, "Madrid", "docente",
+            List.of(), "https://picsum.photos/seed/test/900/1400"),
         null,
         Clock.systemUTC());
   }

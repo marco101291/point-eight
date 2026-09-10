@@ -33,8 +33,23 @@ management:
       show-details: always
 
 pointeight:
+  cors:
+    # Comma-separated origin patterns Spring Security's CORS filter accepts (see SecurityConfig).
+    # Only mobile-client's web target needs this; Expo's dev port isn't fixed, hence a pattern.
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*}
+  auth:
+    # Dev-only default — override with a real secret (>= 32 bytes, HS256 needs 256 bits) outside
+    # local development. Self-issued and self-validated (DEC-022): no external identity provider.
+    jwt-secret: ${JWT_SECRET:dev-only-jwt-secret-change-in-production-0123456789ABCDEF}
+    # DEC-023: short-lived access token (nobody can revoke it early) backed by a revocable,
+    # long-lived refresh token — see JwtTokenIssuer / RefreshToken.
+    access-token-ttl-minutes: ${JWT_ACCESS_TOKEN_TTL_MINUTES:15}
+    refresh-token-ttl-days: ${JWT_REFRESH_TOKEN_TTL_DAYS:30}
   engine:
     base-url: ${ENGINE_BASE_URL:http://localhost:8000}
+  push:
+    # Expo's push service, not Firebase/APNs directly — see ExpoPushNotificationSender.
+    expo-base-url: ${EXPO_PUSH_BASE_URL:https://exp.host}
   match:
     # Default duration for a match when registration doesn't specify one (12 h).
     default-expiry-seconds: ${MATCH_DEFAULT_EXPIRY_SECONDS:43200}

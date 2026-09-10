@@ -1,5 +1,6 @@
 package com.pointeight.events;
 
+import com.pointeight.match.domain.event.MatchActivatedEvent;
 import com.pointeight.match.domain.event.MatchAssignedEvent;
 import com.pointeight.match.domain.event.MatchExpiredEvent;
 import com.pointeight.shared.domain.DomainEvent;
@@ -38,8 +39,8 @@ public class RecentEventsFeed {
 
   /**
    * {@code AFTER_COMMIT}, not a plain listener: {@code MatchAssignedEvent}/{@code
-   * MatchExpiredEvent} are published from inside {@code @Transactional} use cases
-   * (CreateManualMatchUseCase, MatchLifecycleUseCases), and a feed the panel presents as "what
+   * MatchExpiredEvent}/{@code MatchActivatedEvent} are published from inside {@code @Transactional}
+   * use cases (CreateManualMatchUseCase, MatchLifecycleUseCases), and a feed the panel presents as "what
    * actually happened" shouldn't show something whose transaction later rolls back — the same
    * reasoning {@code MatchExpiredEventListener} already applies to the same event type
    * (DEC-015), reused here instead of copying {@code DomainEventLogger}'s plain-listener shape.
@@ -62,6 +63,15 @@ public class RecentEventsFeed {
               new RecentEvent(
                   0,
                   "MatchExpiredEvent",
+                  e.matchId().toString(),
+                  summarize(e.userAId()),
+                  summarize(e.userBId()),
+                  null,
+                  e.occurredAt());
+          case MatchActivatedEvent e ->
+              new RecentEvent(
+                  0,
+                  "MatchActivatedEvent",
                   e.matchId().toString(),
                   summarize(e.userAId()),
                   summarize(e.userBId()),
