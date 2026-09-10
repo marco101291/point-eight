@@ -1,5 +1,6 @@
 package com.pointeight.match.domain;
 
+import com.pointeight.match.domain.event.MatchActivatedEvent;
 import com.pointeight.match.domain.event.MatchAssignedEvent;
 import com.pointeight.match.domain.event.MatchExpiredEvent;
 import com.pointeight.shared.domain.DomainEvent;
@@ -117,6 +118,7 @@ public class Match {
   public void activate(Clock clock) {
     transitionTo(MatchStatus.ACTIVE);
     this.activatedAt = Instant.now(clock);
+    this.pendingEvents.add(new MatchActivatedEvent(id, userAId, userBId, this.activatedAt));
   }
 
   public void expire(Clock clock) {

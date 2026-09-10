@@ -17,14 +17,25 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.marco_101291.mobileclient",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-image"
-    ]
+      "expo-image",
+      "expo-secure-store",
+      "expo-notifications"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ebbcae98-5df9-4099-8451-a120e3016693"
+      }
+    },
+    "owner": "marco_101291"
   }
 }

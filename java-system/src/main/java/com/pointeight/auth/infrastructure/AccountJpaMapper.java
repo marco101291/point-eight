@@ -16,6 +16,7 @@ final class AccountJpaMapper {
     entity.setEmail(account.email().value());
     entity.setPasswordHash(account.password().value());
     entity.setCreatedAt(account.createdAt());
+    entity.setPushToken(account.pushToken().orElse(null));
     return entity;
   }
 
@@ -24,6 +25,7 @@ final class AccountJpaMapper {
         new UserId(entity.getUserId()),
         new Email(entity.getEmail()),
         new HashedPassword(entity.getPasswordHash()),
-        entity.getCreatedAt());
+        entity.getCreatedAt(),
+        entity.getPushToken());
   }
 }

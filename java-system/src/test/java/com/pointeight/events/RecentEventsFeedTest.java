@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.pointeight.match.domain.MatchId;
+import com.pointeight.match.domain.event.MatchActivatedEvent;
 import com.pointeight.match.domain.event.MatchAssignedEvent;
 import com.pointeight.match.domain.event.MatchExpiredEvent;
 import com.pointeight.shared.domain.DomainEvent;
@@ -32,7 +33,7 @@ class RecentEventsFeedTest {
     return User.register(
         new Profile(
             28, Gender.MALE, Set.of(Gender.FEMALE), SeekingType.LONG_TERM, city, profession,
-            List.of()),
+            List.of(), "https://picsum.photos/seed/test/900/1400"),
         null,
         Clock.systemUTC());
   }
@@ -54,6 +55,22 @@ class RecentEventsFeedTest {
         .isEqualTo(new UserSummary(userAId.toString(), "Madrid", "docente"));
     assertThat(recorded.userB()).isEqualTo(new UserSummary(userBId.toString(), "Cordoba", "chef"));
     assertThat(recorded.expiryDurationSeconds()).isEqualTo(3600L);
+  }
+
+  @Test
+  void records_a_match_activated_event() {
+    UserId userAId = UserId.newId();
+    UserId userBId = UserId.newId();
+    MatchId matchId = MatchId.newId();
+    when(users.findById(userAId)).thenReturn(Optional.of(sampleUser("Rosario", "chef")));
+    when(users.findById(userBId)).thenReturn(Optional.of(sampleUser("Cordoba", "musico")));
+
+    feed.on(new MatchActivatedEvent(matchId, userAId, userBId, Instant.now()));
+
+    RecentEvent recorded = feed.since(0).get(0);
+    assertThat(recorded.type()).isEqualTo("MatchActivatedEvent");
+    assertThat(recorded.matchId()).isEqualTo(matchId.toString());
+    assertThat(recorded.expiryDurationSeconds()).isNull();
   }
 
   @Test

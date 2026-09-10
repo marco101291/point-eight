@@ -28,6 +28,9 @@ public class AccountJpaEntity {
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
+  @Column(name = "push_token")
+  private String pushToken;
+
   protected AccountJpaEntity() {
     // Required by JPA.
   }
@@ -62,5 +65,13 @@ public class AccountJpaEntity {
 
   void setCreatedAt(Instant createdAt) {
     this.createdAt = createdAt;
+  }
+
+  String getPushToken() {
+    return pushToken;
+  }
+
+  void setPushToken(String pushToken) {
+    this.pushToken = pushToken;
   }
 }

@@ -19,9 +19,11 @@ public record UpdateUserRequest(
     SeekingType seekingType,
     @NotBlank String city,
     @NotBlank String profession,
-    List<String> hobbies) {
+    List<String> hobbies,
+    @NotBlank String photoUrl) {
 
   public Profile toProfile() {
-    return new Profile(age, gender, seekingGenders, seekingType, city, profession, hobbies);
+    return new Profile(
+        age, gender, seekingGenders, seekingType, city, profession, hobbies, photoUrl);
   }
 }

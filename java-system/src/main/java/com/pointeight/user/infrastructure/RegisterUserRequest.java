@@ -36,6 +36,7 @@ public record RegisterUserRequest(
     @NotBlank String city,
     @NotBlank String profession,
     List<String> hobbies,
+    @NotBlank String photoUrl,
     // --- Layer 2, optional ---
     AttachmentStyle attachmentStyle,
     Double attachmentIntensity,
@@ -47,7 +48,8 @@ public record RegisterUserRequest(
     Double commitmentPaceExpectation) {
 
   public Profile toProfile() {
-    return new Profile(age, gender, seekingGenders, seekingType, city, profession, hobbies);
+    return new Profile(
+        age, gender, seekingGenders, seekingType, city, profession, hobbies, photoUrl);
   }
 
   /**

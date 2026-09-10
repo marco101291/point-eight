@@ -63,6 +63,9 @@ public class UserJpaEntity {
   @Column(name = "hobby", nullable = false)
   private List<String> hobbies = new ArrayList<>();
 
+  @Column(name = "photo_url", nullable = false, length = 2048)
+  private String photoUrl;
+
   // --- Layer 2: never leaves here toward any response DTO ---
   @Enumerated(EnumType.STRING)
   @Column(name = "attachment_style", nullable = false, length = 20)
@@ -173,6 +176,14 @@ public class UserJpaEntity {
 
   void setHobbies(List<String> hobbies) {
     this.hobbies = new ArrayList<>(hobbies);
+  }
+
+  String getPhotoUrl() {
+    return photoUrl;
+  }
+
+  void setPhotoUrl(String photoUrl) {
+    this.photoUrl = photoUrl;
   }
 
   AttachmentStyle getAttachmentStyle() {

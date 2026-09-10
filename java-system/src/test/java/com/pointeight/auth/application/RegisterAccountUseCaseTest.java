@@ -39,7 +39,7 @@ class RegisterAccountUseCaseTest {
   private static Profile sampleProfile() {
     return new Profile(
         28, Gender.MALE, Set.of(Gender.FEMALE), SeekingType.LONG_TERM, "Madrid", "docente",
-        List.of());
+        List.of(), "https://picsum.photos/seed/test/900/1400");
   }
 
   @Test

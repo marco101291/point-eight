@@ -2,6 +2,7 @@ package com.pointeight.config;
 
 import com.pointeight.auth.domain.EmailAlreadyRegisteredException;
 import com.pointeight.auth.domain.InvalidCredentialsException;
+import com.pointeight.auth.domain.InvalidRefreshTokenException;
 import com.pointeight.match.application.UserAlreadyMatchedException;
 import com.pointeight.match.domain.IllegalMatchTransitionException;
 import com.pointeight.shared.domain.ResourceNotFoundException;
@@ -25,6 +26,8 @@ public class GlobalExceptionHandler {
   private static final URI ALREADY_MATCHED = URI.create("urn:pointeight:already-matched");
   private static final URI EMAIL_TAKEN = URI.create("urn:pointeight:email-already-registered");
   private static final URI INVALID_CREDENTIALS = URI.create("urn:pointeight:invalid-credentials");
+  private static final URI INVALID_REFRESH_TOKEN =
+      URI.create("urn:pointeight:invalid-refresh-token");
   private static final URI INVALID_REQUEST = URI.create("urn:pointeight:invalid-request");
   private static final URI ENGINE_UNAVAILABLE = URI.create("urn:pointeight:engine-unavailable");
 
@@ -56,6 +59,12 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(InvalidCredentialsException.class)
   public ProblemDetail onInvalidCredentials(InvalidCredentialsException e) {
     return problem(HttpStatus.UNAUTHORIZED, "Invalid credentials", e.getMessage(), INVALID_CREDENTIALS);
+  }
+
+  @ExceptionHandler(InvalidRefreshTokenException.class)
+  public ProblemDetail onInvalidRefreshToken(InvalidRefreshTokenException e) {
+    return problem(
+        HttpStatus.UNAUTHORIZED, "Invalid refresh token", e.getMessage(), INVALID_REFRESH_TOKEN);
   }
 
   @ExceptionHandler(CompatibilityEngineException.class)

@@ -83,7 +83,8 @@ class UserControllerTest {
             SeekingType.LONG_TERM,
             "Buenos Aires",
             "arquitecta",
-            List.of("cine", "escalada"));
+            List.of("cine", "escalada"),
+            "https://picsum.photos/seed/test/900/1400");
     SimulationParameters params =
         new SimulationParameters(
             AttachmentStyle.DISORGANIZED,
@@ -128,6 +129,7 @@ class UserControllerTest {
           "city": "Buenos Aires",
           "profession": "arquitecta",
           "hobbies": ["cine", "escalada"],
+          "photoUrl": "https://picsum.photos/seed/test/900/1400",
           "attachmentStyle": "DISORGANIZED",
           "attachmentIntensity": 0.93,
           "communicationProfile": {
@@ -214,8 +216,24 @@ class UserControllerTest {
         objectMapper.writeValueAsString(
             new RegisterUserRequest(
                 "user@example.com", "hunter2hunter2", 17, Gender.MALE, Set.of(Gender.FEMALE),
-                SeekingType.CASUAL, "Córdoba", "docente", List.of(), null, null, null, null, null,
-                null, null, null));
+                SeekingType.CASUAL, "Córdoba", "docente", List.of(),
+                "https://picsum.photos/seed/test/900/1400", null, null, null, null, null, null,
+                null, null));
+
+    mockMvc
+        .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("a blank photoUrl is rejected")
+  void photoUrlEnBlanco() throws Exception {
+    String body =
+        objectMapper.writeValueAsString(
+            new RegisterUserRequest(
+                "user@example.com", "hunter2hunter2", 30, Gender.MALE, Set.of(Gender.FEMALE),
+                SeekingType.CASUAL, "Córdoba", "docente", List.of(), "   ", null, null, null,
+                null, null, null, null, null));
 
     mockMvc
         .perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content(body))

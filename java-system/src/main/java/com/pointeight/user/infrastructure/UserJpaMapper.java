@@ -26,6 +26,7 @@ final class UserJpaMapper {
     entity.setCity(profile.city());
     entity.setProfession(profile.profession());
     entity.setHobbies(profile.hobbies());
+    entity.setPhotoUrl(profile.photoUrl());
 
     SimulationParameters params = user.simulationParameters();
     entity.setAttachmentStyle(params.attachmentStyle());
@@ -55,7 +56,8 @@ final class UserJpaMapper {
             entity.getSeekingType(),
             entity.getCity(),
             entity.getProfession(),
-            entity.getHobbies());
+            entity.getHobbies(),
+            entity.getPhotoUrl());
 
     SimulationParameters params =
         new SimulationParameters(

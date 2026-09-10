@@ -101,7 +101,8 @@ class RequestCompatibilityScoreUseCaseTest {
             SeekingType.LONG_TERM,
             "Buenos Aires",
             "arquitecta",
-            List.of("cine"));
+            List.of("cine"),
+            "https://picsum.photos/seed/test/900/1400");
     SimulationParameters parameters =
         new SimulationParameters(
             AttachmentStyle.SECURE,

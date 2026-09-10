@@ -26,10 +26,10 @@ class AccountTest {
     UserId userId = UserId.newId();
     Account a =
         Account.rehydrate(
-            userId, new Email("a@example.com"), new HashedPassword("hash-a"), Instant.now());
+            userId, new Email("a@example.com"), new HashedPassword("hash-a"), Instant.now(), null);
     Account b =
         Account.rehydrate(
-            userId, new Email("b@example.com"), new HashedPassword("hash-b"), Instant.now());
+            userId, new Email("b@example.com"), new HashedPassword("hash-b"), Instant.now(), null);
 
     assertThat(a).isEqualTo(b);
     assertThat(a).hasSameHashCodeAs(b);
@@ -42,8 +42,50 @@ class AccountTest {
             UserId.newId(),
             new Email("marco@example.com"),
             new HashedPassword("super-secret-hash"),
-            Instant.now());
+            Instant.now(),
+            null);
 
     assertThat(account.toString()).doesNotContain("super-secret-hash");
+  }
+
+  @Test
+  void a_freshly_registered_account_has_no_push_token() {
+    Account account =
+        Account.register(
+            UserId.newId(),
+            new Email("marco@example.com"),
+            new HashedPassword("hash"),
+            Clock.systemUTC());
+
+    assertThat(account.pushToken()).isEmpty();
+  }
+
+  @Test
+  void registering_a_push_token_makes_it_available() {
+    Account account =
+        Account.register(
+            UserId.newId(),
+            new Email("marco@example.com"),
+            new HashedPassword("hash"),
+            Clock.systemUTC());
+
+    account.registerPushToken("ExponentPushToken[abc123]");
+
+    assertThat(account.pushToken()).contains("ExponentPushToken[abc123]");
+  }
+
+  @Test
+  void registering_a_new_push_token_replaces_the_old_one() {
+    Account account =
+        Account.register(
+            UserId.newId(),
+            new Email("marco@example.com"),
+            new HashedPassword("hash"),
+            Clock.systemUTC());
+    account.registerPushToken("ExponentPushToken[old]");
+
+    account.registerPushToken("ExponentPushToken[new]");
+
+    assertThat(account.pushToken()).contains("ExponentPushToken[new]");
   }
 }

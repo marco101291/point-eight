@@ -3,6 +3,7 @@ package com.pointeight.match.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.pointeight.match.domain.event.MatchActivatedEvent;
 import com.pointeight.match.domain.event.MatchAssignedEvent;
 import com.pointeight.match.domain.event.MatchExpiredEvent;
 import com.pointeight.user.domain.UserId;
@@ -90,10 +91,28 @@ class MatchTest {
     }
 
     @Test
+    void PENDING_a_ACTIVE_emite_MatchActivatedEvent() {
+      Match match = pendingMatch();
+      match.pullEvents(); // discard the assignment event
+
+      match.activate(clock);
+
+      assertThat(match.pullEvents())
+          .singleElement()
+          .isInstanceOfSatisfying(
+              MatchActivatedEvent.class,
+              event -> {
+                assertThat(event.userAId()).isEqualTo(alice);
+                assertThat(event.userBId()).isEqualTo(bob);
+                assertThat(event.occurredAt()).isEqualTo(T0);
+              });
+    }
+
+    @Test
     void ACTIVE_a_EXPIRED_emite_MatchExpiredEvent() {
       Match match = pendingMatch();
       match.activate(clock);
-      match.pullEvents(); // discard the assignment event
+      match.pullEvents(); // discard the assignment and activation events
 
       match.expire(clock);
 

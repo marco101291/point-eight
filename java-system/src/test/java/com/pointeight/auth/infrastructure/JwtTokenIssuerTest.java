@@ -31,7 +31,7 @@ class JwtTokenIssuerTest {
   }
 
   @Test
-  void the_issued_token_expires_roughly_the_configured_hours_from_now() {
+  void the_issued_token_expires_roughly_the_configured_minutes_from_now() {
     UserId userId = UserId.newId();
 
     Instant before = Instant.now();
@@ -39,7 +39,7 @@ class JwtTokenIssuerTest {
     Claims claims = parse(token);
 
     Duration untilExpiry = Duration.between(before, claims.getExpiration().toInstant());
-    assertThat(untilExpiry).isCloseTo(Duration.ofHours(24), Duration.ofSeconds(5));
+    assertThat(untilExpiry).isCloseTo(Duration.ofMinutes(24), Duration.ofSeconds(5));
   }
 
   @Test

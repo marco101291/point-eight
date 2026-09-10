@@ -76,7 +76,8 @@ class TraitDerivationTest {
             SeekingType.LONG_TERM,
             "Rosario",
             "cirujana",
-            List.of("ajedrez"));
+            List.of("ajedrez"),
+            "https://picsum.photos/seed/test/900/1400");
 
     SimulationParameters params = TraitDerivation.defaultsFor(profile);
 

@@ -4,6 +4,7 @@ import com.pointeight.user.domain.UserId;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Login credentials for a user. Deliberately not a field on {@link com.pointeight.user.domain.User}
@@ -19,23 +20,35 @@ public class Account {
   private final Email email;
   private final HashedPassword password;
   private final Instant createdAt;
+  private String pushToken;
 
-  private Account(UserId userId, Email email, HashedPassword password, Instant createdAt) {
+  private Account(
+      UserId userId, Email email, HashedPassword password, Instant createdAt, String pushToken) {
     this.userId = Objects.requireNonNull(userId, "userId");
     this.email = Objects.requireNonNull(email, "email");
     this.password = Objects.requireNonNull(password, "password");
     this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
+    this.pushToken = pushToken;
   }
 
   public static Account register(
       UserId userId, Email email, HashedPassword password, Clock clock) {
-    return new Account(userId, email, password, Instant.now(clock));
+    return new Account(userId, email, password, Instant.now(clock), null);
   }
 
   /** Rehydration from persistence. Only used by the adapter's mapper. */
   public static Account rehydrate(
-      UserId userId, Email email, HashedPassword password, Instant createdAt) {
-    return new Account(userId, email, password, createdAt);
+      UserId userId, Email email, HashedPassword password, Instant createdAt, String pushToken) {
+    return new Account(userId, email, password, createdAt, pushToken);
+  }
+
+  /**
+   * One token per account (M7): a second call from a reinstalled or different device simply
+   * replaces the one on file, rather than this project taking on multi-device delivery and the
+   * receipt-driven cleanup of invalid tokens that would come with it.
+   */
+  public void registerPushToken(String pushToken) {
+    this.pushToken = pushToken;
   }
 
   public UserId userId() {
@@ -52,6 +65,10 @@ public class Account {
 
   public Instant createdAt() {
     return createdAt;
+  }
+
+  public Optional<String> pushToken() {
+    return Optional.ofNullable(pushToken);
   }
 
   /** Identity by the user it belongs to. */
