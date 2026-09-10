@@ -527,10 +527,22 @@ ExpoPushNotificationSender` calls Expo's push service (`https://exp.host/--/api/
 is the first thing in the codebase to use it since M4 moved the Engine call to AMQP, `DEC-016`).
 Deliberately *not* pushed onto a queue the way scoring was: nothing here is on a request/response
 critical path a caller is blocked waiting on — the trigger is already an `AFTER_COMMIT` listener
-running outside any HTTP request. Verified against the real Expo endpoint (not mocked) with a
-fake token: the call succeeds at the HTTP level (Expo returns 200 with a per-message error in the
-body — `"DeviceNotRegistered"` — not an HTTP error status), confirming the whole chain fires
-correctly; only real on-device delivery is still unverified, pending the development build.
+running outside any HTTP request. First verified against the real Expo endpoint (not mocked) with a
+fake token: the call succeeded at the HTTP level (Expo returns 200 with a per-message error in the
+body — `"DeviceNotRegistered"` — not an HTTP error status), confirming the whole chain fired
+correctly before real device delivery was even possible to test.
+
+**Real device delivery, and the trap that cost the most time in this block:** with a development
+build installed and a real Expo push token registered, activation still failed —
+`"InvalidCredentials" / "Unable to retrieve the FCM server key"` — even though `eas credentials`
+had "succeeded." The Firebase service account key had landed in the wrong slot: EAS's credentials
+menu lists **"Push Notifications (FCM Legacy)"** and **"Push Notifications (FCM V1): Google Service
+Account Key"** as two separate entries, and the legacy one accepted a file path without complaint
+even though Google shut that API down in 2024 — nothing in the CLI flags this as wrong at upload
+time. The fix was uploading the same key again into the V1 slot specifically. Once corrected,
+delivery was confirmed twice on a physical Android device: once via a direct call to Expo's
+endpoint, once via a real `Match.activate()` → `MatchActivatedEvent` → listener →
+`ExpoPushNotificationSender` cycle. M7 is closed.
 
 ## Open questions
 

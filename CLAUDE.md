@@ -37,7 +37,7 @@ React/Next.js.
 | **M4** Async + events | ✅ | Candidate `Specification`/`Strategy` (`DEC-014`), `MatchExpiredEvent` auto-rematches both users (`AFTER_COMMIT` + `REQUIRES_NEW`, `DEC-015`), real `collapse_probability(ratio)`, scoring moved to fire-and-forget RabbitMQ (`DEC-016`). 99 Java tests, 39 Python tests |
 | **M5** Admin panel | ✅ | `SimulationRun` persistence (`DEC-017`); Markov graph, spaghetti plot, force-directed compound graph (all `d3-force`, `DEC-018`); live "the System deciding" feed polling `GET /api/events`. 104 Java tests, 52 Python tests |
 | **M6** Polish | ✅ | Engine endpoint tests against real Postgres via `testcontainers` (`DEC-019`); `java-system` migrates to Flyway, `ddl-auto: validate` (`DEC-020`); C4 context + container diagrams (`docs/c4.md`). 104 Java tests, 55 Python tests |
-| **M7** Mobile client | 🚧 | Not in the original spec — added after M4 (`DEC-021` … `DEC-024`). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, a login screen and a reveal screen (Layer 1 + photo — no name field, same invariant as everywhere else) wired to `java-system` for real, `expo-secure-store` for the tokens, and a working logout button. `GET /api/matches/me/reveal` is the real reveal endpoint (`RevealActiveMatchUseCase`), identity from the JWT only, `Profile` carrying a real `photoUrl` (`V3__profile_photo.sql`). Auth (`com.pointeight.auth`) issues an access/refresh pair (`DEC-023`): a short-lived JWT access token (15 min) plus a long-lived, opaque, revocable refresh token (`RefreshToken`, `V4`/`V5`) that rotates race-safely and detects reuse. `DEC-024` wires push notifications on `MatchStatus → ACTIVE`: `Match.activate()` now records `MatchActivatedEvent`, `MatchActivatedEventListener` reacts `AFTER_COMMIT` to notify both users via `ExpoPushNotificationSender` (a new `push` package, `RestClient` to Expo's push service), and `Account` carries one push token (`V6__account_push_token.sql`) registered through `POST /api/auth/push-token`. Verified end to end against the real Expo endpoint; only real on-device delivery is unverified, since **Expo Go has dropped remote push support (SDK 53+)** — `mobile-client/eas.json` adds a `development` build profile, but running `eas login`/`eas build` needs the project owner's own Expo account. 157 Java tests |
+| **M7** Mobile client | ✅ | Not in the original spec — added after M4 (`DEC-021` … `DEC-024`). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, a login screen and a reveal screen (Layer 1 + photo — no name field, same invariant as everywhere else) wired to `java-system` for real, `expo-secure-store` for the tokens, and a working logout button. `GET /api/matches/me/reveal` is the real reveal endpoint (`RevealActiveMatchUseCase`), identity from the JWT only, `Profile` carrying a real `photoUrl` (`V3__profile_photo.sql`). Auth (`com.pointeight.auth`) issues an access/refresh pair (`DEC-023`): a short-lived JWT access token (15 min) plus a long-lived, opaque, revocable refresh token (`RefreshToken`, `V4`/`V5`) that rotates race-safely and detects reuse. `DEC-024` wires push notifications on `MatchStatus → ACTIVE`: `Match.activate()` now records `MatchActivatedEvent`, `MatchActivatedEventListener` reacts `AFTER_COMMIT` to notify both users via `ExpoPushNotificationSender` (a new `push` package, `RestClient` to Expo's push service), and `Account` carries one push token (`V6__account_push_token.sql`) registered through `POST /api/auth/push-token`. **Real on-device delivery confirmed** on a physical Android phone via an EAS development build (`mobile-client/eas.json`) — activating a match on the server produced an actual notification on the device, FCM V1 credentials and all. 157 Java tests |
 
 Inventory: 132 Java files (main), 31 test, 23 Python, 26 TS (18 admin-panel, 8 mobile-client).
 
@@ -192,7 +192,16 @@ Code comments and documentation **in English**. Code identifiers, in English.
   scheduled) notifications still work there; a server-triggered one — the whole point of `DEC-024`
   — silently does nothing to test in Expo Go, no error either. Testing push for real needs a
   development build (`mobile-client/eas.json`'s `development` profile, `eas build --profile
-  development`) installed instead of Expo Go on the device.
+  development`) installed instead of Expo Go on the device — and reinstalled clean (uninstall
+  first), not just updated in place, after any change to `google-services.json` or native config;
+  an in-place "update" was observed keeping stale Firebase state and failing with a Firebase
+  initialization error that had nothing to do with the actual (already-fixed) cause.
+- **`eas credentials`'s Android push menu has two separate FCM slots** — "FCM Legacy" and "FCM V1:
+  Google Service Account Key" — and uploading the Firebase service account JSON to the wrong one
+  (Legacy) succeeds silently, no warning that Google shut that API down in 2024. Symptom: Expo
+  returns `200` with `{"status":"error","details":{"error":"InvalidCredentials"}}` — a per-message
+  error inside a successful HTTP response, not an upload-time failure. Fix is re-uploading the same
+  JSON into the **FCM V1** slot specifically.
 
 ---
 
@@ -214,7 +223,8 @@ token, specifically so the mobile client's logout button can actually revoke som
 whole rotation family), both verified against real Postgres; one non-security nuance remains on the
 purely-concurrent case, see Open questions in `docs/architecture.md`. `DEC-024` resolved the last
 M7 groundwork item: `Match.activate()` now records `MatchActivatedEvent`, triggering a push
-notification via a new `push` package (Expo's push service, `RestClient`) — verified against the
-real Expo endpoint, but real on-device delivery needs a development build (Expo Go dropped remote
-push support in SDK 53), which needs the project owner's own Expo account to build. Still open
-overall: both sub-questions `DEC-021` raised (Layer 2 sourcing, date-end detection).
+notification via a new `push` package (Expo's push service, `RestClient`) — needed a development
+build (Expo Go dropped remote push support in SDK 53) and the project owner's own Firebase project
+for FCM V1 credentials, both now set up; confirmed delivering real notifications to a physical
+device. M7 is closed. Still open: both sub-questions `DEC-021` raised (Layer 2 sourcing, date-end
+detection) — forward-looking product questions, not blocking anything built so far.
