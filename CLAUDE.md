@@ -6,7 +6,7 @@ runs thousands of Monte Carlo simulations over emotional Markov chains. The name
 0.8:1 positive:negative ratio that Gottman/Levenson identified as a breakup risk signal.
 
 Full spec: [`hang-the-dj-sim.md`](hang-the-dj-sim.md).
-Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-022`).
+Architecture decisions: [`docs/architecture.md`](docs/architecture.md) (`DEC-001` … `DEC-024`).
 C4 diagrams: [`docs/c4.md`](docs/c4.md).
 
 ---
@@ -37,9 +37,9 @@ React/Next.js.
 | **M4** Async + events | ✅ | Candidate `Specification`/`Strategy` (`DEC-014`), `MatchExpiredEvent` auto-rematches both users (`AFTER_COMMIT` + `REQUIRES_NEW`, `DEC-015`), real `collapse_probability(ratio)`, scoring moved to fire-and-forget RabbitMQ (`DEC-016`). 99 Java tests, 39 Python tests |
 | **M5** Admin panel | ✅ | `SimulationRun` persistence (`DEC-017`); Markov graph, spaghetti plot, force-directed compound graph (all `d3-force`, `DEC-018`); live "the System deciding" feed polling `GET /api/events`. 104 Java tests, 52 Python tests |
 | **M6** Polish | ✅ | Engine endpoint tests against real Postgres via `testcontainers` (`DEC-019`); `java-system` migrates to Flyway, `ddl-auto: validate` (`DEC-020`); C4 context + container diagrams (`docs/c4.md`). 104 Java tests, 55 Python tests |
-| **M7** Mobile client | 🚧 | Not in the original spec — added after M4 (`DEC-021`, `DEC-022`). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, one reveal screen (Layer 1 + photo, mock data — no name field, same invariant as everywhere else). Minimal auth built in `java-system` (`com.pointeight.auth`): `Account` separate from `User`, JWT login (`POST /api/auth/login`), `JwtAuthenticationFilter`, `GET /api/auth/me` — the only endpoint that requires a token so far, everything else stays open. Still needed: a photo field on `Profile`, the real reveal endpoint (protected by the same filter), push notifications on `MatchStatus → ACTIVE`. 124 Java tests |
+| **M7** Mobile client | 🚧 | Not in the original spec — added after M4 (`DEC-021` … `DEC-024`). `mobile-client/`: Expo SDK 57 + Expo Router + TypeScript, a login screen and a reveal screen (Layer 1 + photo — no name field, same invariant as everywhere else) wired to `java-system` for real, `expo-secure-store` for the tokens, and a working logout button. `GET /api/matches/me/reveal` is the real reveal endpoint (`RevealActiveMatchUseCase`), identity from the JWT only, `Profile` carrying a real `photoUrl` (`V3__profile_photo.sql`). Auth (`com.pointeight.auth`) issues an access/refresh pair (`DEC-023`): a short-lived JWT access token (15 min) plus a long-lived, opaque, revocable refresh token (`RefreshToken`, `V4`/`V5`) that rotates race-safely and detects reuse. `DEC-024` wires push notifications on `MatchStatus → ACTIVE`: `Match.activate()` now records `MatchActivatedEvent`, `MatchActivatedEventListener` reacts `AFTER_COMMIT` to notify both users via `ExpoPushNotificationSender` (a new `push` package, `RestClient` to Expo's push service), and `Account` carries one push token (`V6__account_push_token.sql`) registered through `POST /api/auth/push-token`. Verified end to end against the real Expo endpoint; only real on-device delivery is unverified, since **Expo Go has dropped remote push support (SDK 53+)** — `mobile-client/eas.json` adds a `development` build profile, but running `eas login`/`eas build` needs the project owner's own Expo account. 157 Java tests |
 
-Inventory: 108 Java files (main), 24 test, 23 Python, 20 TS (18 admin-panel, 2 mobile-client).
+Inventory: 132 Java files (main), 31 test, 23 Python, 26 TS (18 admin-panel, 8 mobile-client).
 
 **The Python Engine runs a real simulation**, but the wire contract still says
 `modelVersion: "v0"` — bumping it to `"v1"` needs a matching one-line change in
@@ -176,6 +176,23 @@ Code comments and documentation **in English**. Code identifiers, in English.
   declares optional web-only peers (`@radix-ui/react-tabs`, `vaul`, `react-dom`) that conflict under
   npm's strict resolver even for a mobile-only app that never touches the web target — plain
   `npm install` fails with `ERESOLVE` without it.
+- **`mobile-client`'s `localhost` default for `java-system` only resolves from the iOS simulator and
+  `expo start --web`.** The Android emulator's own loopback is `10.0.2.2`, not `localhost`; a
+  physical device needs the dev machine's LAN IP. Override with `EXPO_PUBLIC_API_URL` (copy
+  `mobile-client/.env.example` to `.env`) rather than editing `lib/api.ts`'s fallback.
+- **`java-system` had no CORS configuration until `mobile-client`'s login screen needed one.** The
+  admin panel was never affected — it fetches `java-system` from its Next.js server component, not
+  the browser — so this went unnoticed until `expo start --web` tried a real cross-origin `fetch()`
+  and got a bare "Invalid CORS request" 403 on the preflight, which surfaces client-side as a
+  generic network failure, not a readable 4xx. `SecurityConfig`'s `corsConfigurationSource()` bean
+  fixes it (origin patterns `http://localhost:*`/`http://127.0.0.1:*`, since Expo's dev port isn't
+  fixed) — if a *new* symptom like this shows up again, check CORS before assuming the backend is
+  down.
+- **Expo Go cannot receive remote push notifications at all, since SDK 53.** Local (device-
+  scheduled) notifications still work there; a server-triggered one — the whole point of `DEC-024`
+  — silently does nothing to test in Expo Go, no error either. Testing push for real needs a
+  development build (`mobile-client/eas.json`'s `development` profile, `eas build --profile
+  development`) installed instead of Expo Go on the device.
 
 ---
 
@@ -189,5 +206,15 @@ persistence was resolved in M5 as `DEC-017`; M5's three visualizations and live 
 — the scoring cycle joining that feed is still open. M6 resolved the engine's DB-backed test
 strategy as `DEC-019` and the move off `ddl-auto` as `DEC-020`. M7 resolved the mobile client's
 stack and scope as `DEC-021`, and minimal authentication (`Account` separate from `User`, JWT) as
-`DEC-022` — the reveal endpoint joining `authenticated()` is still open, along with both
-sub-questions `DEC-021` raised (Layer 2 sourcing, date-end detection).
+`DEC-022`. The reveal endpoint joins `authenticated()` (`GET /api/matches/me/reveal`,
+`RevealActiveMatchUseCase`) and the mobile client is wired to it for real. `DEC-023` replaced the
+single long-lived JWT with a short-lived access token backed by a revocable, rotating refresh
+token, specifically so the mobile client's logout button can actually revoke something server-side
+— rotation is race-safe (atomic DB claim) and detects a stale token being replayed (revokes the
+whole rotation family), both verified against real Postgres; one non-security nuance remains on the
+purely-concurrent case, see Open questions in `docs/architecture.md`. `DEC-024` resolved the last
+M7 groundwork item: `Match.activate()` now records `MatchActivatedEvent`, triggering a push
+notification via a new `push` package (Expo's push service, `RestClient`) — verified against the
+real Expo endpoint, but real on-device delivery needs a development build (Expo Go dropped remote
+push support in SDK 53), which needs the project owner's own Expo account to build. Still open
+overall: both sub-questions `DEC-021` raised (Layer 2 sourcing, date-end detection).
