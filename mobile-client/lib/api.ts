@@ -129,6 +129,8 @@ export type Reveal = {
   city: string;
   profession: string;
   hobbies: string[];
+  /** ISO 8601 — when the match itself expires, for the reveal screen's countdown. */
+  expiresAt: string;
 };
 
 /**

@@ -1,11 +1,12 @@
-import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { SERIF } from "../components/Logo";
 import { ApiError, fetchActiveMatchReveal, logout as apiLogout, type Reveal } from "../lib/api";
 import { registerForPushNotificationsAsync } from "../lib/pushNotifications";
+import { theme } from "../lib/theme";
 import { clearTokens } from "../lib/tokenStorage";
 
 // Layer 1 only, mirroring the point-eight domain's non-negotiable invariant (see the main repo's
@@ -40,7 +41,7 @@ export default function RevealScreen() {
       }
       setState({
         status: "error",
-        message: e instanceof ApiError ? e.message : "Could not reach the System.",
+        message: e instanceof ApiError ? e.message : "No se pudo contactar al Sistema.",
       });
     }
   }, []);
@@ -73,7 +74,7 @@ export default function RevealScreen() {
   if (state.status === "loading" || state.status === "unauthenticated") {
     return (
       <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator color="#e8b4a0" />
+        <ActivityIndicator color={theme.muted} />
       </View>
     );
   }
@@ -83,8 +84,8 @@ export default function RevealScreen() {
       <View style={[styles.root, styles.centered]}>
         <SafeAreaView style={styles.emptyState}>
           <Text style={styles.eyebrow}>El Sistema</Text>
-          <Text style={styles.emptyHeadline}>Todavía no hay match activo</Text>
-          <Text style={styles.emptyBody}>El Sistema te va a avisar cuando decida algo.</Text>
+          <Text style={styles.emptyHeadline}>Todavía no hay coincidencia activa</Text>
+          <Text style={styles.emptyBody}>El Sistema va a avisar cuando decida algo.</Text>
           <Pressable style={styles.retryButton} onPress={load}>
             <Text style={styles.retryText}>Actualizar</Text>
           </Pressable>
@@ -112,49 +113,89 @@ export default function RevealScreen() {
     );
   }
 
-  const { reveal } = state;
+  return <ActiveMatch reveal={state.reveal} onLogout={handleLogout} />;
+}
+
+function ActiveMatch({ reveal, onLogout }: { reveal: Reveal; onLogout: () => void }) {
+  const router = useRouter();
+  const countdown = useCountdown(reveal.expiresAt);
+  const photoScale = useRef(new Animated.Value(1)).current;
+
+  function handleOpenProfile() {
+    Animated.sequence([
+      Animated.timing(photoScale, {
+        toValue: 1.08,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(photoScale, {
+        toValue: 1,
+        duration: 160,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => router.push("/match-profile"));
+  }
 
   return (
-    <View style={styles.root}>
-      <Image
-        source={{ uri: reveal.photoUrl }}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        transition={200}
-      />
-      <SafeAreaView edges={["top"]} style={styles.topBar}>
-        <Pressable onPress={handleLogout} style={styles.logoutPill}>
-          <Text style={styles.logoutPillText}>Cerrar sesión</Text>
+    <SafeAreaView style={styles.root}>
+      <View style={styles.topBar}>
+        <Text style={styles.eyebrow}>Expediente activo</Text>
+        <Pressable onPress={onLogout} hitSlop={12}>
+          <Text style={styles.logoutLink}>Cerrar sesión</Text>
         </Pressable>
-      </SafeAreaView>
-      <LinearGradient
-        colors={["transparent", "rgba(0,0,0,0.85)"]}
-        locations={[0.4, 1]}
-        style={styles.gradient}
-      >
-        <SafeAreaView edges={["bottom"]} style={styles.content}>
-          <Text style={styles.eyebrow}>Tu match</Text>
-          <Text style={styles.headline}>
-            {reveal.age} · {reveal.city}
-          </Text>
-          <Text style={styles.profession}>{reveal.profession}</Text>
-          <View style={styles.hobbies}>
-            {reveal.hobbies.map((hobby) => (
-              <View key={hobby} style={styles.hobbyChip}>
-                <Text style={styles.hobbyText}>{hobby}</Text>
-              </View>
-            ))}
-          </View>
-        </SafeAreaView>
-      </LinearGradient>
-    </View>
+      </View>
+
+      <View style={styles.photoWrap}>
+        <Pressable onPress={handleOpenProfile}>
+          <Animated.View style={[styles.photoRing, { transform: [{ scale: photoScale }] }]}>
+            <Image
+              source={{ uri: reveal.photoUrl }}
+              style={styles.photo}
+              contentFit="cover"
+              transition={300}
+            />
+          </Animated.View>
+        </Pressable>
+
+        <Text style={styles.countdown}>{countdown}</Text>
+      </View>
+    </SafeAreaView>
   );
+}
+
+/** Live HH:MM:SS until `expiresAtIso`, ticking every second. Floors at 00:00:00 — this screen
+ * doesn't poll on its own, so a match that actually expired while open just sits at zero until
+ * the user navigates back and the next load() call finds it gone (404 -> "no-match"). */
+export function useCountdown(expiresAtIso: string): string {
+  const [label, setLabel] = useState(() => formatRemaining(expiresAtIso));
+
+  useEffect(() => {
+    setLabel(formatRemaining(expiresAtIso));
+    const interval = setInterval(() => setLabel(formatRemaining(expiresAtIso)), 1000);
+    return () => clearInterval(interval);
+  }, [expiresAtIso]);
+
+  return label;
+}
+
+function formatRemaining(expiresAtIso: string): string {
+  const remainingMs = new Date(expiresAtIso).getTime() - Date.now();
+  if (remainingMs <= 0) {
+    return "00:00:00";
+  }
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#0b0b0c",
+    backgroundColor: theme.bg,
   },
   centered: {
     justifyContent: "center",
@@ -166,99 +207,72 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyHeadline: {
-    color: "#fff",
+    fontFamily: SERIF,
+    color: theme.fg,
     fontSize: 20,
-    fontWeight: "600",
     textAlign: "center",
   },
   emptyBody: {
-    color: "#c9c7c2",
+    fontFamily: SERIF,
+    color: theme.muted,
     fontSize: 15,
     textAlign: "center",
   },
   retryButton: {
     marginTop: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    borderRadius: 10,
+    borderColor: theme.line,
+    borderRadius: 2,
     paddingHorizontal: 20,
     paddingVertical: 10,
   },
   retryText: {
-    color: "#fff",
+    fontFamily: SERIF,
+    color: theme.fg,
     fontSize: 14,
   },
   logoutLink: {
-    marginTop: 20,
-    color: "#8a8781",
+    fontFamily: SERIF,
+    color: theme.muted,
     fontSize: 13,
     textDecorationLine: "underline",
   },
   topBar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    alignItems: "flex-end",
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  logoutPill: {
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  logoutPillText: {
-    color: "#fff",
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: "uppercase",
-  },
-  gradient: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: "55%",
-    justifyContent: "flex-end",
-  },
-  content: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingTop: 12,
   },
   eyebrow: {
-    color: "#e8b4a0",
-    fontSize: 13,
+    fontFamily: SERIF,
+    color: theme.muted,
+    fontSize: 12,
     letterSpacing: 2,
     textTransform: "uppercase",
-    marginBottom: 6,
   },
-  headline: {
-    color: "#fff",
-    fontSize: 30,
-    fontWeight: "600",
+  photoWrap: {
+    alignItems: "center",
+    marginTop: 56,
   },
-  profession: {
-    color: "#e8e6e1",
-    fontSize: 17,
-    marginTop: 4,
-  },
-  hobbies: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 18,
-  },
-  hobbyChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+  photoRing: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
+    borderColor: theme.line,
+    padding: 6,
   },
-  hobbyText: {
-    color: "#fff",
-    fontSize: 13,
+  photo: {
+    flex: 1,
+    borderRadius: 100,
+  },
+  countdown: {
+    fontFamily: SERIF,
+    color: theme.fg,
+    fontSize: 56,
+    letterSpacing: 2,
+    marginTop: 28,
+    fontVariant: ["tabular-nums"],
   },
 });
