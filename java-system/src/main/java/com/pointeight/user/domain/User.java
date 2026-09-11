@@ -1,7 +1,11 @@
 package com.pointeight.user.domain;
 
+import com.pointeight.shared.domain.DomainEvent;
+import com.pointeight.user.domain.event.UserRegisteredEvent;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -18,6 +22,8 @@ public class User {
   private ConfidenceScore cumulativeConfidenceScore;
   private final Instant createdAt;
   private Instant updatedAt;
+
+  private final List<DomainEvent> pendingEvents = new ArrayList<>();
 
   private User(
       UserId id,
@@ -43,13 +49,16 @@ public class User {
   public static User register(Profile profile, SimulationParameters parameters, Clock clock) {
     Objects.requireNonNull(profile, "profile");
     Instant now = Instant.now(clock);
-    return new User(
-        UserId.newId(),
-        profile,
-        parameters == null ? TraitDerivation.defaultsFor(profile) : parameters,
-        ConfidenceScore.initial(),
-        now,
-        now);
+    User user =
+        new User(
+            UserId.newId(),
+            profile,
+            parameters == null ? TraitDerivation.defaultsFor(profile) : parameters,
+            ConfidenceScore.initial(),
+            now,
+            now);
+    user.pendingEvents.add(new UserRegisteredEvent(user.id, now));
+    return user;
   }
 
   /** Rehydration from persistence. Only used by the adapter's mapper. */
@@ -79,6 +88,13 @@ public class User {
   public void adjustConfidence(ConfidenceScore score, Clock clock) {
     this.cumulativeConfidenceScore = Objects.requireNonNull(score, "score");
     this.updatedAt = Instant.now(clock);
+  }
+
+  /** Returns the accumulated events and clears the buffer. Idempotent on successive calls. */
+  public List<DomainEvent> pullEvents() {
+    List<DomainEvent> drained = List.copyOf(pendingEvents);
+    pendingEvents.clear();
+    return drained;
   }
 
   public UserId id() {
