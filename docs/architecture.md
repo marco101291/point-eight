@@ -624,7 +624,16 @@ state (one array of selected option indices) and no navigation-stack complexity 
 that's really one linear flow. Layer 1 comes first, then the nine questions; the last answer
 submits immediately (no separate review step), computes the Layer 2 baseline client-side via
 `computeLayer2Baseline`, calls the existing endpoint, then logs in with the same credentials right
-after, since registration returns `UserResponse`, not a token pair.
+after, since registration returns `UserResponse`, not a token pair. Rather than landing straight on
+the countdown screen, a confirmation view holds for a few seconds first — a ring animation and "En
+breve te asignaremos una pareja..." — auto-advancing on its own (or immediately on tap), the same
+"it decides, you're told" tone as the rest of the System rather than a "tap to continue" the user
+has to drive themselves.
+
+Verifying this end to end surfaced two things worth its own script: `scripts/seed-users.py`
+populates thousands of randomized users via the same `POST /api/users` endpoint, since
+`RandomEligibleCandidateStrategy` had almost nothing to pick from otherwise; and doing that
+surfaced the "no first match on registration" gap recorded in Open questions below.
 
 **Recalibration trigger, post-match:** fires once per match, at the match's own terminal
 transition (`ACTIVE → EXPIRED` or `ACTIVE → REJECTED` — explicitly both, not just expiry), not
@@ -712,3 +721,13 @@ reason the sign-up questionnaire avoids one.
   by manually expiring the stale match, not fixed at the root. Needs a real `@Scheduled` job before
   M7's follow-up work is considered done, independent of the name-field and duration-scale questions
   above.
+- A newly registered user never gets a first match, automatically or otherwise. Found while testing
+  the DEC-026 sign-up flow end to end: registration only creates `User` + `Account`
+  (`RegisterAccountUseCase`) — nothing calls `CreateManualMatchUseCase` or `AssignNextMatchUseCase`
+  for them. `AssignNextMatchUseCase` only ever fires reactively, off `MatchExpiredEvent`
+  (`MatchExpiredEventListener`), so it needs an *existing* match to react to; a user with zero
+  matches has nothing to expire, so nothing ever assigns them one. Worked around for manual testing
+  by calling `POST /api/matches` + `/activate` by hand (same shape as `scripts/seed-users.py`'s
+  candidate pool), not fixed at the root. Likely belongs in the same `@Scheduled` job as the
+  auto-expiry gap above — one job that both expires what's due and assigns a first match to anyone
+  who's never had one — rather than a second, separate mechanism.
