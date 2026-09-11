@@ -12,7 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * What the mobile client's reveal screen (DEC-021) shows: the counterpart's Layer 1 profile and
- * photo for the caller's currently ACTIVE match, nothing else. There's at most one — DEC-007's
+ * photo for the caller's currently ACTIVE match, plus when that match expires — the countdown the
+ * reveal screen gates the full profile behind. There's at most one active match — DEC-007's
  * one-open-match-per-user invariant — so "the" active match, not a list.
  */
 @Service
@@ -27,7 +28,7 @@ public class RevealActiveMatchUseCase {
     this.users = users;
   }
 
-  public Profile execute(UserId requester) {
+  public ActiveMatchReveal execute(UserId requester) {
     Match active =
         matches.findByUser(requester).stream()
             .filter(match -> match.status() == MatchStatus.ACTIVE)
@@ -36,9 +37,22 @@ public class RevealActiveMatchUseCase {
 
     UserId counterpartId =
         active.userAId().equals(requester) ? active.userBId() : active.userAId();
-    return users
-        .findById(counterpartId)
-        .orElseThrow(() -> new UserNotFoundException(counterpartId))
-        .profile();
+    Profile profile =
+        users
+            .findById(counterpartId)
+            .orElseThrow(() -> new UserNotFoundException(counterpartId))
+            .profile();
+
+    // activate() always stamps activatedAt, so an ACTIVE match's expiresAt() is never empty in
+    // practice — the exception here is a defensive "this invariant broke," not an expected path.
+    var expiresAt =
+        active
+            .expiresAt()
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "ACTIVE match %s has no expiresAt".formatted(active.id())));
+
+    return new ActiveMatchReveal(profile, expiresAt);
   }
 }
