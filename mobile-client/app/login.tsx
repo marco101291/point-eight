@@ -105,6 +105,10 @@ export default function LoginScreen() {
                 )
               }
             </Pressable>
+
+            <Pressable onPress={() => router.push("/signup")} hitSlop={12}>
+              <Text style={styles.signupLink}>¿No tienes cuenta? Regístrate</Text>
+            </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -196,5 +200,13 @@ const styles = StyleSheet.create({
   },
   buttonTextPressed: {
     color: theme.bg,
+  },
+  signupLink: {
+    fontFamily: SERIF,
+    color: theme.muted,
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 16,
+    textDecorationLine: "underline",
   },
 });
