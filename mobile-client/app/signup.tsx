@@ -1,9 +1,10 @@
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -101,10 +102,55 @@ export default function SignupScreen() {
     Array(QUESTIONS.length).fill(null),
   );
   const [submitting, setSubmitting] = useState(false);
+  const [registered, setRegistered] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stepOpacity = useRef(new Animated.Value(1)).current;
+  const ringOpacity = useRef(new Animated.Value(0)).current;
+  const ringScale = useRef(new Animated.Value(0.7)).current;
+  const ringPulse = useRef(new Animated.Value(1)).current;
+  const messageOpacity = useRef(new Animated.Value(0)).current;
 
   const photoUrl = `https://picsum.photos/seed/${profile.photoSeed}/900/1400`;
+
+  // The confirmation screen replaces the last question once registration succeeds: an entrance
+  // (ring scales and fades in, then the message), a slow breathing loop while it's up, and an
+  // automatic hand-off back to the countdown screen — nothing left for the user to do, matching
+  // the System's own "it decides, you're told" tone rather than a form's "tap to continue".
+  useEffect(() => {
+    if (!registered) return;
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(ringOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
+        Animated.timing(ringScale, {
+          toValue: 1,
+          duration: 550,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(messageOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
+    ]).start(() => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(ringPulse, {
+            toValue: 1.08,
+            duration: 1100,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(ringPulse, {
+            toValue: 1,
+            duration: 1100,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+    });
+
+    const timer = setTimeout(() => router.replace("/"), 4200);
+    return () => clearTimeout(timer);
+  }, [registered]);
 
   function animateToStep(next: number) {
     Animated.sequence([
@@ -160,13 +206,18 @@ export default function SignupScreen() {
       });
       const tokens = await login(email, profile.password);
       await setTokens(tokens);
-      router.replace("/");
-      // Fire-and-forget, same reasoning as login.tsx: shouldn't hold up entering the app.
+      // Fire-and-forget, same reasoning as login.tsx: shouldn't hold up the confirmation screen.
       registerForPushNotificationsAsync();
+      setSubmitting(false);
+      setRegistered(true);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "No se pudo contactar al Sistema.");
       setSubmitting(false);
     }
+  }
+
+  function handleContinue() {
+    router.replace("/");
   }
 
   function toggleSeekingGender(gender: Gender) {
@@ -185,192 +236,223 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <View style={styles.topBar}>
-        <Pressable onPress={handleBack} style={styles.backButton} hitSlop={12}>
-          <Text style={styles.backButtonText}>Atrás</Text>
-        </Pressable>
-        {stepIndex > 0 && (
-          <Text style={styles.progress}>
-            {stepIndex} / {QUESTIONS.length}
-          </Text>
-        )}
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
-        <Animated.View style={[styles.stepContent, { opacity: stepOpacity }]}>
-          {question ? (
-            <View style={styles.questionBlock}>
-              <Text style={styles.questionPrompt}>{question.prompt}</Text>
-              <View style={styles.optionList}>
-                {question.options.map((option, i) => (
-                  <Pressable
-                    key={option.label}
-                    style={({ pressed }) => [styles.optionButton, pressed && styles.optionPressed]}
-                    onPress={() => handleAnswer(i)}
-                    disabled={submitting}
-                  >
-                    {({ pressed }) => (
-                      <Text style={[styles.optionText, pressed && styles.optionTextPressed]}>
-                        {option.label}
-                      </Text>
-                    )}
-                  </Pressable>
-                ))}
-              </View>
-              {submitting && (
-                <View style={styles.submittingRow}>
-                  <ActivityIndicator color={theme.muted} />
-                  <Text style={styles.submittingText}>El Sistema está registrando tu expediente…</Text>
-                </View>
-              )}
-            </View>
-          ) : (
-            <ScrollView
-              style={styles.flex}
-              contentContainerStyle={styles.form}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <Logo size={56} color={theme.fg} />
-              <Text style={styles.headline}>Crear cuenta</Text>
-
-              <View style={styles.photoRow}>
-                <Image source={{ uri: photoUrl }} style={styles.photo} contentFit="cover" />
-                <Pressable
-                  onPress={() => setProfile((prev) => ({ ...prev, photoSeed: randomSeed() }))}
-                  hitSlop={12}
-                >
-                  <Text style={styles.photoLink}>Nueva fotografía</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  keyboardType="email-address"
-                  value={profile.email}
-                  onChangeText={(email) => setProfile((prev) => ({ ...prev, email }))}
-                />
-              </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>Contraseña</Text>
-                <TextInput
-                  style={styles.input}
-                  autoCapitalize="none"
-                  secureTextEntry
-                  value={profile.password}
-                  onChangeText={(password) => setProfile((prev) => ({ ...prev, password }))}
-                />
-              </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>Edad</Text>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="number-pad"
-                  value={profile.age}
-                  onChangeText={(age) => setProfile((prev) => ({ ...prev, age }))}
-                />
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Género</Text>
-                <View style={styles.chipRow}>
-                  {GENDERS.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      label={label}
-                      selected={profile.gender === value}
-                      onPress={() => setProfile((prev) => ({ ...prev, gender: value }))}
-                    />
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Busca</Text>
-                <View style={styles.chipRow}>
-                  {GENDERS.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      label={label}
-                      selected={profile.seekingGenders.has(value)}
-                      onPress={() => toggleSeekingGender(value)}
-                    />
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Tipo de relación</Text>
-                <View style={styles.chipRow}>
-                  {SEEKING_TYPES.map(({ value, label }) => (
-                    <Chip
-                      key={value}
-                      label={label}
-                      selected={profile.seekingType === value}
-                      onPress={() => setProfile((prev) => ({ ...prev, seekingType: value }))}
-                    />
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Ciudad</Text>
-                <TextInput
-                  style={styles.input}
-                  value={profile.city}
-                  onChangeText={(city) => setProfile((prev) => ({ ...prev, city }))}
-                />
-              </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>Profesión</Text>
-                <TextInput
-                  style={styles.input}
-                  value={profile.profession}
-                  onChangeText={(profession) => setProfile((prev) => ({ ...prev, profession }))}
-                />
-              </View>
-              <View style={styles.field}>
-                <Text style={styles.label}>Pasatiempos (sepáralos con comas)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={profile.hobbies}
-                  onChangeText={(hobbies) => setProfile((prev) => ({ ...prev, hobbies }))}
-                />
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.button,
-                  pressed && isProfileValid(profile) && styles.buttonPressed,
-                  !isProfileValid(profile) && styles.buttonDisabled,
-                ]}
-                onPress={() => animateToStep(1)}
-                disabled={!isProfileValid(profile)}
-              >
-                {({ pressed }) => (
-                  <Text
-                    style={[
-                      styles.buttonText,
-                      pressed && isProfileValid(profile) && styles.buttonTextPressed,
-                    ]}
-                  >
-                    Siguiente
-                  </Text>
-                )}
-              </Pressable>
-            </ScrollView>
+      {!registered && (
+        <View style={styles.topBar}>
+          <Pressable onPress={handleBack} style={styles.backButton} hitSlop={12}>
+            <Text style={styles.backButtonText}>Atrás</Text>
+          </Pressable>
+          {stepIndex > 0 && (
+            <Text style={styles.progress}>
+              {stepIndex} / {QUESTIONS.length}
+            </Text>
           )}
-        </Animated.View>
-      </KeyboardAvoidingView>
+        </View>
+      )}
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      {registered ? (
+        <Pressable style={styles.confirmation} onPress={handleContinue}>
+          <Animated.View
+            style={[
+              styles.confirmationRing,
+              {
+                opacity: ringOpacity,
+                transform: [{ scale: Animated.multiply(ringScale, ringPulse) }],
+              },
+            ]}
+          />
+          <Animated.View style={[styles.confirmationText, { opacity: messageOpacity }]}>
+            <Text style={styles.eyebrow}>El Sistema</Text>
+            <Text style={styles.confirmationMessage}>
+              En breve te asignaremos una pareja de acuerdo a tus datos. Recibirás una
+              notificación cuando eso ocurra.
+            </Text>
+            <Text style={styles.continueLink}>Continuar</Text>
+          </Animated.View>
+        </Pressable>
+      ) : (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={styles.flex}
+        >
+          <Animated.View style={[styles.stepContent, { opacity: stepOpacity }]}>
+            {question ? (
+              <View style={styles.questionBlock}>
+                <Text style={styles.questionPrompt}>{question.prompt}</Text>
+                <View style={styles.optionList}>
+                  {question.options.map((option, i) => (
+                    <Pressable
+                      key={option.label}
+                      style={({ pressed }) => [
+                        styles.optionButton,
+                        pressed && styles.optionPressed,
+                      ]}
+                      onPress={() => handleAnswer(i)}
+                      disabled={submitting}
+                    >
+                      {({ pressed }) => (
+                        <Text style={[styles.optionText, pressed && styles.optionTextPressed]}>
+                          {option.label}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ))}
+                </View>
+                {submitting && (
+                  <View style={styles.submittingRow}>
+                    <ActivityIndicator color={theme.muted} />
+                    <Text style={styles.submittingText}>
+                      El Sistema está registrando tu expediente…
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.flex}
+                contentContainerStyle={styles.form}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <Logo size={56} color={theme.fg} />
+                <Text style={styles.headline}>Crear cuenta</Text>
+
+                <View style={styles.photoRow}>
+                  <Image source={{ uri: photoUrl }} style={styles.photo} contentFit="cover" />
+                  <Pressable
+                    onPress={() => setProfile((prev) => ({ ...prev, photoSeed: randomSeed() }))}
+                    hitSlop={12}
+                  >
+                    <Text style={styles.photoLink}>Nueva fotografía</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Email</Text>
+                  <TextInput
+                    style={styles.input}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    value={profile.email}
+                    onChangeText={(email) => setProfile((prev) => ({ ...prev, email }))}
+                  />
+                </View>
+                <View style={styles.field}>
+                  <Text style={styles.label}>Contraseña</Text>
+                  <TextInput
+                    style={styles.input}
+                    autoCapitalize="none"
+                    secureTextEntry
+                    value={profile.password}
+                    onChangeText={(password) => setProfile((prev) => ({ ...prev, password }))}
+                  />
+                </View>
+                <View style={styles.field}>
+                  <Text style={styles.label}>Edad</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="number-pad"
+                    value={profile.age}
+                    onChangeText={(age) => setProfile((prev) => ({ ...prev, age }))}
+                  />
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Género</Text>
+                  <View style={styles.chipRow}>
+                    {GENDERS.map(({ value, label }) => (
+                      <Chip
+                        key={value}
+                        label={label}
+                        selected={profile.gender === value}
+                        onPress={() => setProfile((prev) => ({ ...prev, gender: value }))}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Busca</Text>
+                  <View style={styles.chipRow}>
+                    {GENDERS.map(({ value, label }) => (
+                      <Chip
+                        key={value}
+                        label={label}
+                        selected={profile.seekingGenders.has(value)}
+                        onPress={() => toggleSeekingGender(value)}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Tipo de relación</Text>
+                  <View style={styles.chipRow}>
+                    {SEEKING_TYPES.map(({ value, label }) => (
+                      <Chip
+                        key={value}
+                        label={label}
+                        selected={profile.seekingType === value}
+                        onPress={() => setProfile((prev) => ({ ...prev, seekingType: value }))}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.field}>
+                  <Text style={styles.label}>Ciudad</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={profile.city}
+                    onChangeText={(city) => setProfile((prev) => ({ ...prev, city }))}
+                  />
+                </View>
+                <View style={styles.field}>
+                  <Text style={styles.label}>Profesión</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={profile.profession}
+                    onChangeText={(profession) =>
+                      setProfile((prev) => ({ ...prev, profession }))
+                    }
+                  />
+                </View>
+                <View style={styles.field}>
+                  <Text style={styles.label}>Pasatiempos (sepáralos con comas)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={profile.hobbies}
+                    onChangeText={(hobbies) => setProfile((prev) => ({ ...prev, hobbies }))}
+                  />
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.button,
+                    pressed && isProfileValid(profile) && styles.buttonPressed,
+                    !isProfileValid(profile) && styles.buttonDisabled,
+                  ]}
+                  onPress={() => animateToStep(1)}
+                  disabled={!isProfileValid(profile)}
+                >
+                  {({ pressed }) => (
+                    <Text
+                      style={[
+                        styles.buttonText,
+                        pressed && isProfileValid(profile) && styles.buttonTextPressed,
+                      ]}
+                    >
+                      Siguiente
+                    </Text>
+                  )}
+                </Pressable>
+              </ScrollView>
+            )}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      )}
+
+      {error && !registered && <Text style={styles.error}>{error}</Text>}
     </SafeAreaView>
   );
 }
@@ -426,6 +508,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 1,
     fontVariant: ["tabular-nums"],
+  },
+  confirmation: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+    gap: 40,
+  },
+  confirmationRing: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1,
+    borderColor: theme.fg,
+  },
+  confirmationText: {
+    alignItems: "center",
+    gap: 20,
+  },
+  eyebrow: {
+    fontFamily: SERIF,
+    color: theme.muted,
+    fontSize: 12,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  confirmationMessage: {
+    fontFamily: SERIF,
+    color: theme.fg,
+    fontSize: 20,
+    lineHeight: 28,
+    textAlign: "center",
+  },
+  continueLink: {
+    fontFamily: SERIF,
+    color: theme.muted,
+    fontSize: 13,
+    textDecorationLine: "underline",
   },
   stepContent: {
     flex: 1,
