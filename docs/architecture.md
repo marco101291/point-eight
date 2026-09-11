@@ -544,6 +544,44 @@ delivery was confirmed twice on a physical Android device: once via a direct cal
 endpoint, once via a real `Match.activate()` → `MatchActivatedEvent` → listener →
 `ExpoPushNotificationSender` cycle. M7 is closed.
 
+### DEC-025 — Reveal screen split into countdown + profile detail, institutional look over dating-app conventions
+
+Post-M7 mobile polish, not a new milestone: the reveal screen's first version showed the
+countdown and Layer 1 data on one screen, expanding in place on tap. Two problems with that —
+visually it read as a generic dating-app card (full-bleed photo, rows of labeled data), which
+worked against the "the System observes you, you don't interrogate it" tone the login screen
+already established; and once the data was up, there was no way to collapse it again short of
+tapping the photo a second time, which doesn't read as an affordance.
+
+Replaced with two routes instead of one screen with two states. `app/index.tsx` now shows only
+the circular photo and a large countdown (`HH:MM:SS`, ticking client-side off the match's
+`expiresAt` — see below) — closer to the login screen's own restraint than a profile card.
+Tapping the photo runs a brief scale-bounce (`Animated`, no `react-native-reanimated` dependency)
+and pushes `app/match-profile.tsx`, a separate screen with its own circular photo, Layer 1 facts
+as plain centered serif text (no bordered rows — the earlier "table" look was explicitly the
+thing being moved away from), and a bordered "Volver" control. Closing it is a real back
+navigation, not a toggle, so it can't get stuck half-open.
+
+`match-profile.tsx` fetches its own reveal rather than receiving one through route params: if the
+match ends while the screen is open, the reveal call 404s, and rather than this screen trying to
+own that state too, it just shows a generic "no longer available" message and lets the user go
+back — `index.tsx`'s own `load()` discovers the real state (`no-match`) on return. This also
+needed `java-system` to start returning the match's own `expiresAt` alongside the counterpart's
+profile: `RevealActiveMatchUseCase` now returns `ActiveMatchReveal(profile, expiresAt)` instead of
+a bare `Profile`, and `RevealResponse` serializes both.
+
+Two layout bugs surfaced once this was actually used on a device, both from the same root cause:
+the "Volver" control lived in a normal flex row above the centered content, so its height pushed
+the content's vertical center down from the screen's true center — same-looking bug as "not
+centered," but actually a flex-flow issue. Fixed by making the top bar `position: absolute` so it
+floats over a `centerLayer` that owns the full screen height. The control itself was also nearly
+invisible: its border used `theme.line` (`#26262a`), a hair different from the screen's own
+background (`#0b0b0c`) — practically zero contrast. Switched to `theme.fg` for both this and the
+equivalent control in the error state. Separately, `router.back()` silently does nothing if the
+screen is ever reached with no navigation history behind it (e.g. a reload landing directly on
+this route) — `handleBack()` now checks `router.canGoBack()` first and falls back to
+`router.replace("/")`.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -595,3 +633,24 @@ endpoint, once via a real `Match.activate()` → `MatchActivatedEvent` → liste
   directly onto the individual `RefreshTokenJpaRepository` methods instead, so each repository call
   commits independently the moment it returns — nothing left open to deadlock against, and nothing
   to roll back a revoke that already happened.
+- Raised and paused: adding a name field. Explicitly requested twice, pushed back on twice (it
+  breaks the structural non-name invariant documented as non-negotiable — see CLAUDE.md), confirmed
+  twice by the project owner, then paused mid-discussion ("mejor pensemos esto de nuevo") before any
+  code changed. No implementation exists. Needs the project owner to either resume or drop this
+  explicitly before it's touched again — not something to infer from later, unrelated requests.
+- `pointeight.match.default-expiry-seconds` is `43200` (12h) today, and every `Match` test uses the
+  same figure — it's never been exercised at the scale a real "how long are these two paired"
+  window might actually need (weeks, months). Nothing in `Match`'s own logic assumes hours (it's
+  plain `Instant`/`Duration` arithmetic), but `mobile-client`'s countdown display does: it formats
+  remaining time as `HH:MM:SS` with no cap, so a month-scale match would render as something like
+  `"720:00:00"` in the giant countdown DEC-025 just built. If match duration is ever meant to
+  reflect something closer to relationship length rather than a fast demo cadence, the countdown
+  display needs a different treatment at that scale (e.g. a coarser unit above some threshold), not
+  just a passing domain test with a longer `Duration`.
+- No scheduler exists to auto-expire matches. `Match.isDue()`'s own javadoc says it's "checked by
+  the scheduler from M4 on," but no `@Scheduled` job was ever built — a match past its `expiresAt`
+  just sits `ACTIVE` until something else happens to touch it. This isn't hypothetical: it produced
+  a real, visible bug (a reveal screen showing a countdown already at zero) that was worked around
+  by manually expiring the stale match, not fixed at the root. Needs a real `@Scheduled` job before
+  M7's follow-up work is considered done, independent of the name-field and duration-scale questions
+  above.

@@ -202,6 +202,13 @@ Code comments and documentation **in English**. Code identifiers, in English.
   returns `200` with `{"status":"error","details":{"error":"InvalidCredentials"}}` — a per-message
   error inside a successful HTTP response, not an upload-time failure. Fix is re-uploading the same
   JSON into the **FCM V1** slot specifically.
+- **Merely importing `expo-notifications` (not calling anything on it) crashes the app on Android
+  in Expo Go**, since SDK 53 — a harder failure than the "remote push silently does nothing" trap
+  above. `mobile-client/app/index.tsx` imports `lib/pushNotifications.ts` unconditionally, so a
+  static `import * as Notifications from "expo-notifications"` at the top of that file took the
+  whole app down before any try/catch ever ran. Fixed by moving the `Constants.appOwnership ===
+  "expo"` check *before* the import and turning the import itself into a dynamic `await
+  import("expo-notifications")`, gated behind that check.
 
 ---
 
@@ -227,4 +234,12 @@ notification via a new `push` package (Expo's push service, `RestClient`) — ne
 build (Expo Go dropped remote push support in SDK 53) and the project owner's own Firebase project
 for FCM V1 credentials, both now set up; confirmed delivering real notifications to a physical
 device. M7 is closed. Still open: both sub-questions `DEC-021` raised (Layer 2 sourcing, date-end
-detection) — forward-looking product questions, not blocking anything built so far.
+detection) — forward-looking product questions, not blocking anything built so far. Post-M7 mobile
+polish continues on `feat/mobile-match-screen-redesign`: `DEC-025` split the reveal screen into a
+countdown-only route and a separate `/match-profile` detail route with a real back navigation,
+moved the visual language away from dating-app conventions toward the login screen's own
+restraint, and fixed a centering bug and a near-invisible back control along the way. Three
+questions raised during that work are open, see `docs/architecture.md`: whether to add a name
+field (paused, not decided), whether match duration should ever be longer than the 12h demo
+default and what that means for the countdown display, and the still-missing `@Scheduled`
+auto-expiry job.
