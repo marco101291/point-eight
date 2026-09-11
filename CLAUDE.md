@@ -246,5 +246,6 @@ auto-expiry job. `DEC-026` resolves both sub-questions `DEC-021` left open — a
 multiple-choice-only sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`,
 `attachmentIntensity`, `communicationProfile`; the rest is either derived already or deliberately
 left unasked), and post-match recalibration fires once per match at its terminal transition
-(`EXPIRED` or `REJECTED`), not per date. Decided, not yet implemented — no sign-up screen and no
-recalibration code exist yet, and `Match.reject()` still records no domain event.
+(`EXPIRED` or `REJECTED`), not per date. The questionnaire and sign-up screen are built
+(`mobile-client/app/signup.tsx`); the recalibration trigger is still only a design decision, and
+`Match.reject()` still records no domain event, needed before it can fire on that side.

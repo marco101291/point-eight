@@ -583,8 +583,9 @@ this route) — `handleBack()` now checks `router.canGoBack()` first and falls b
 
 ### DEC-026 — Layer 2 sourcing: a multiple-choice sign-up questionnaire, and a match-level recalibration trigger
 
-Resolves both sub-questions `DEC-021` left open. Decided, **not yet implemented** — no sign-up
-screen, no recalibration code exists yet; this records the design before building it.
+Resolves both sub-questions `DEC-021` left open. The sign-up questionnaire below is now built
+(`mobile-client/app/signup.tsx`, `lib/layer2Questionnaire.ts`); the recalibration trigger is still
+only a design decision — no code for it exists yet.
 
 **At sign-up:** rejected an explicit "rate your personality" form outright — a user can't
 knowingly shape the model the System keeps of them, the same reasoning that keeps Layer 2 out of
@@ -615,12 +616,15 @@ spec (`TraitDerivation`), so asking about them would be redundant. That leaves `
   else, so without a question it silently stays at the flat default (`0.5`) for every user. One
   question, three options mapped to `0.2 / 0.5 / 0.8`.
 
-No new backend work: `POST /api/users` (`RegisterUserRequest.toSimulationParameters()`) already
-accepts all three fields and already creates both `User` and `Account` in one call
-(`RegisterAccountUseCase`). The sign-up screen only needs to collect Layer 1 + the nine answers,
-compute the three Layer 2 values client-side from the fixed mapping above, and call the existing
-endpoint — then log in with the same credentials, since registration returns `UserResponse`, not a
-token pair.
+No new backend work was needed: `POST /api/users` (`RegisterUserRequest.toSimulationParameters()`)
+already accepted all three fields and already created both `User` and `Account` in one call
+(`RegisterAccountUseCase`). `signup.tsx` is one route, one question per screen (a fade transition
+between steps, a `n / 9` progress counter) rather than nine separate Expo Router routes — simpler
+state (one array of selected option indices) and no navigation-stack complexity for something
+that's really one linear flow. Layer 1 comes first, then the nine questions; the last answer
+submits immediately (no separate review step), computes the Layer 2 baseline client-side via
+`computeLayer2Baseline`, calls the existing endpoint, then logs in with the same credentials right
+after, since registration returns `UserResponse`, not a token pair.
 
 **Recalibration trigger, post-match:** fires once per match, at the match's own terminal
 transition (`ACTIVE → EXPIRED` or `ACTIVE → REJECTED` — explicitly both, not just expiry), not
