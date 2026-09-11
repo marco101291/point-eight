@@ -241,11 +241,18 @@ moved the visual language away from dating-app conventions toward the login scre
 restraint, and fixed a centering bug and a near-invisible back control along the way. Three
 questions raised during that work are open, see `docs/architecture.md`: whether to add a name
 field (paused, not decided), whether match duration should ever be longer than the 12h demo
-default and what that means for the countdown display, and the still-missing `@Scheduled`
-auto-expiry job. `DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question,
+default and what that means for the countdown display, and (since `DEC-027`) how the countdown
+should read while a user genuinely has no match yet — that state is far more common now that
+matching is real. `DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question,
 multiple-choice-only sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`,
 `attachmentIntensity`, `communicationProfile`; the rest is either derived already or deliberately
 left unasked), and post-match recalibration fires once per match at its terminal transition
 (`EXPIRED` or `REJECTED`), not per date. The questionnaire and sign-up screen are built
 (`mobile-client/app/signup.tsx`); the recalibration trigger is still only a design decision, and
-`Match.reject()` still records no domain event, needed before it can fire on that side.
+`Match.reject()` still records no domain event, needed before it can fire on that side. `DEC-027`
+closes the gap both DEC-025 and DEC-026 surfaced — matching never actually happening on its own:
+`MatchExpiryScheduler` (`@Scheduled`, finally built — `Match.isDue()`'s javadoc had claimed this
+since M1) auto-expires due matches, and a new `UserRegisteredEvent` (`User` gained the same
+`pendingEvents` machinery `Match` already had) triggers `AssignNextMatchUseCase` the moment
+someone registers, no polling needed for that half. Turned out to be two separate mechanisms, not
+one job, once actually designed.

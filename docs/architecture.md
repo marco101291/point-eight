@@ -649,6 +649,55 @@ reason the sign-up questionnaire avoids one.
 **Known gap this surfaces:** `Match.reject()` records no domain event today (only `propose()`,
 `activate()`, and `expire()` do) — needed before this trigger can fire on the `REJECTED` side.
 
+### DEC-027 — Two separate mechanisms close the "nothing ever triggers a match" gap, not one
+
+Closes both open questions `DEC-026` (and DEC-025 before it) left about matching never actually
+happening on its own: no auto-expiry, and no first match for a new registration. Originally
+assumed these belonged in one `@Scheduled` job; turned out to be two different *kinds* of trigger,
+and forcing them into one job would have meant polling for something registration can announce for
+free.
+
+**Auto-expiry stays genuinely time-driven** — nothing "happens" when a match's window runs out,
+there's no event to react to, so it needs a poll. `MatchExpiryScheduler`
+(`match.infrastructure`, `@Scheduled(fixedDelayString =
+"${pointeight.match.expiry-check-interval-ms:60000}")`, `SchedulingConfig` adds the
+`@EnableScheduling` nothing had turned on before) fetches every `ACTIVE` match in one page —
+deliberately not an incrementing-offset loop, since expiring a match removes it from the `ACTIVE`
+set mid-sweep, which would shift what "page 2" means out from under an offset-based scan; a single
+fetch sized to the current `ACTIVE` count sidesteps that entirely, the same "fine at this scale"
+tradeoff `AssignNextMatchUseCase`'s own candidate-pool fetch already makes. For each match past its
+`expiresAt` (`Match.isDue(clock)`), it calls `MatchLifecycleUseCases.expire()` — not a bespoke bulk
+update — so `MatchExpiredEventListener`'s existing rematch chain fires exactly as it already does
+for a manual `/expire` call. This job's only job is finding what's due.
+
+**First-match assignment turned out not to need polling at all.** A new registration is a real
+event happening at a real moment — there's no reason to wait up to a minute for the next scheduler
+tick to notice it when registration can announce it directly, the same way `Match.activate()`
+announces itself instead of something polling for `ACTIVE` matches with no notification sent yet.
+`User` gained the same `pendingEvents`/`pullEvents()` machinery `Match` already had (it had none
+before this — first time a second aggregate needed it), and `User.register()` now records
+`UserRegisteredEvent`. `RegisterUserUseCase.execute()` publishes it after `save()`, pulling events
+from the pre-save `user` object rather than the one `save()` returns — the adapter round-trips
+through `UserJpaMapper.toDomain()`, a fresh rehydrated instance with an empty event buffer, exactly
+the reason `MatchLifecycleUseCases.apply()` already pulls from `match`, not from what `matches.save`
+hands back. Since `RegisterUserUseCase` is only ever called from `RegisterAccountUseCase`
+(`@Transactional`, default propagation), the event fires only once both `User` and `Account` are
+durably committed together — not merely once the inner call returns.
+
+`UserRegisteredEventListener` (`match.infrastructure`, `AFTER_COMMIT`) reacts by calling the
+already-generic `AssignNextMatchUseCase.execute(userId)` — no changes needed there at all, it
+already just checks `hasOpenMatch` and searches for a candidate regardless of whether the caller is
+a fresh registration or a just-expired match. Deliberately placed in `match.infrastructure`, not
+`user.infrastructure`: matchmaking is a `match`-package concern reacting to a `user`-package event,
+the same direction `RevealActiveMatchUseCase` already crosses (`match` depending on `user`, never
+the reverse).
+
+**Known limitation:** the ~3000 users `scripts/seed-users.py` created before this shipped never
+got the event fired, so they stay matchless unless something re-triggers them — acceptable for now
+since their purpose was being a candidate *pool* for other users (`AssignNextMatchUseCase`'s
+random selection doesn't care whether a candidate itself has ever been matched), not being matched
+with each other.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -714,20 +763,9 @@ reason the sign-up questionnaire avoids one.
   reflect something closer to relationship length rather than a fast demo cadence, the countdown
   display needs a different treatment at that scale (e.g. a coarser unit above some threshold), not
   just a passing domain test with a longer `Duration`.
-- No scheduler exists to auto-expire matches. `Match.isDue()`'s own javadoc says it's "checked by
-  the scheduler from M4 on," but no `@Scheduled` job was ever built — a match past its `expiresAt`
-  just sits `ACTIVE` until something else happens to touch it. This isn't hypothetical: it produced
-  a real, visible bug (a reveal screen showing a countdown already at zero) that was worked around
-  by manually expiring the stale match, not fixed at the root. Needs a real `@Scheduled` job before
-  M7's follow-up work is considered done, independent of the name-field and duration-scale questions
-  above.
-- A newly registered user never gets a first match, automatically or otherwise. Found while testing
-  the DEC-026 sign-up flow end to end: registration only creates `User` + `Account`
-  (`RegisterAccountUseCase`) — nothing calls `CreateManualMatchUseCase` or `AssignNextMatchUseCase`
-  for them. `AssignNextMatchUseCase` only ever fires reactively, off `MatchExpiredEvent`
-  (`MatchExpiredEventListener`), so it needs an *existing* match to react to; a user with zero
-  matches has nothing to expire, so nothing ever assigns them one. Worked around for manual testing
-  by calling `POST /api/matches` + `/activate` by hand (same shape as `scripts/seed-users.py`'s
-  candidate pool), not fixed at the root. Likely belongs in the same `@Scheduled` job as the
-  auto-expiry gap above — one job that both expires what's due and assigns a first match to anyone
-  who's never had one — rather than a second, separate mechanism.
+- ~~No scheduler exists to auto-expire matches~~ and ~~a newly registered user never gets a first
+  match~~ — both closed by `DEC-027`: `MatchExpiryScheduler` polls for due matches,
+  `UserRegisteredEvent` + `UserRegisteredEventListener` handle first-match assignment without
+  polling. The ~3000 users seeded before `DEC-027` shipped stay matchless themselves (see DEC-027's
+  own "known limitation") — not re-triggered retroactively, since it wasn't needed for what they're
+  actually for (being candidates for other users, not getting matched with each other).
