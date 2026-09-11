@@ -1,19 +1,6 @@
 import Constants from "expo-constants";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { registerPushToken } from "./api";
-
-// Foreground behavior: without this, expo-notifications shows nothing while the app is open.
-// The System already has the reveal screen for anything worth the user's attention while they're
-// in the app — a banner on top of it would just be noise.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: false,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
 
 /**
  * Requests permission and registers this device's Expo push token with java-system, so the
@@ -21,10 +8,36 @@ Notifications.setNotificationHandler({
  * already authenticated — never assumes the token from last time is still the one on file.
  *
  * <p>Remote push doesn't work in Expo Go at all since SDK 53 — only in a development build. This
- * fails soft everywhere it can (no EAS project configured yet, no permission granted, running in
- * Expo Go) rather than throwing, since none of those should block using the rest of the app.
+ * isn't just "the API call fails soft": merely importing `expo-notifications` throws synchronously
+ * on Android in Expo Go, which would crash the whole app before any try/catch here ever runs,
+ * since app/index.tsx imports this module unconditionally. So the Expo Go check has to happen
+ * *before* the import, via a dynamic `import()`, not inside the function body after a static one.
+ *
+ * <p>`Constants.appOwnership === "expo"` is deprecated in favor of `executionEnvironment`, but
+ * deliberately used anyway: `executionEnvironment` merges Expo Go and a development build (both
+ * report `storeClient`), losing exactly the distinction this needs — `appOwnership` is still the
+ * only field that identifies Expo Go specifically.
  */
 export async function registerForPushNotificationsAsync(): Promise<void> {
+  if (Constants.appOwnership === "expo") {
+    console.warn("[push] running in Expo Go — remote push isn't supported there since SDK 53");
+    return;
+  }
+
+  const Notifications = await import("expo-notifications");
+
+  // Foreground behavior: without this, expo-notifications shows nothing while the app is open.
+  // The System already has the reveal screen for anything worth the user's attention while
+  // they're in the app — a banner on top of it would just be noise.
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: false,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+
   if (Platform.OS === "android") {
     // Required before requesting a token on Android 13+, regardless of whether permission is
     // granted yet.
