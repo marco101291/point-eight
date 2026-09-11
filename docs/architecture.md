@@ -361,8 +361,7 @@ SecureStore has no native backing there), and the reveal screen now has real loa
 states instead of a single hardcoded payload. Push notifications on activation are still open — no
 domain event exists for that transition yet, so there's nothing to trigger off of.
 
-**Two sub-questions raised at the same time, still open, revisit once auth and the reveal endpoint
-exist:**
+**Two sub-questions raised at the same time, resolved as `DEC-026` below:**
 - Where Layer 2 actually comes from in-fiction, once there's a real client: `User.recalibrate()`
   (M1, unused since) hints at the intended shape — a `TraitDerivation` baseline at registration,
   then ongoing recalibration from indirect post-date signals collected through the app (never an
@@ -581,6 +580,61 @@ equivalent control in the error state. Separately, `router.back()` silently does
 screen is ever reached with no navigation history behind it (e.g. a reload landing directly on
 this route) — `handleBack()` now checks `router.canGoBack()` first and falls back to
 `router.replace("/")`.
+
+### DEC-026 — Layer 2 sourcing: a multiple-choice sign-up questionnaire, and a match-level recalibration trigger
+
+Resolves both sub-questions `DEC-021` left open. Decided, **not yet implemented** — no sign-up
+screen, no recalibration code exists yet; this records the design before building it.
+
+**At sign-up:** rejected an explicit "rate your personality" form outright — a user can't
+knowingly shape the model the System keeps of them, the same reasoning that keeps Layer 2 out of
+every response. Instead, a bank of indirect, scenario-based questions, each phrased as a concrete
+situation with fixed multiple-choice answers (never open text): free text would need AI/NLP
+classification to map onto a trait, which is both unreliable and gameable — a user can type
+anything, including nothing usable, and a scenario question with three fixed options can't be
+answered with garbage. Each option maps deterministically to a value, no inference step at
+request time.
+
+Scoped to exactly the `SimulationParameters` fields that are actually personality, not fact or
+derivable data: `infidelityHistory`, `relationshipHistory`, and `activeAddiction` are left
+unrequested by design (factual/sensitive, not something a scenario question can honestly surface);
+`stressBaseline` and `commitmentPaceExpectation` are already derived from profession/age per the
+spec (`TraitDerivation`), so asking about them would be redundant. That leaves `attachmentStyle`,
+`attachmentIntensity`, and `communicationProfile` — nine questions total:
+
+- **Attachment (4, → `attachmentStyle`):** each question offers one option leaning secure, one
+  anxious, one avoidant. Scored by plurality across all four: 3+ secure answers → `SECURE`;
+  otherwise, if both anxious- and avoidant-leaning answers appear at all → `DISORGANIZED`
+  (avoidant-anxious mixed, per attachment theory); otherwise whichever of anxious/avoidant has more
+  answers wins; a clean tie falls back to `SECURE`.
+- **Communication under conflict (4, → `communicationProfile`):** one question per horseman
+  (criticism, contempt, defensiveness, stonewalling — same field order as
+  `CommunicationProfile`'s constructor), each a "nunca / a veces / seguido" frequency scale mapped
+  to `0.1 / 0.4 / 0.8` for that field.
+- **Attachment intensity (1, → `attachmentIntensity`):** no field derives or asks this anywhere
+  else, so without a question it silently stays at the flat default (`0.5`) for every user. One
+  question, three options mapped to `0.2 / 0.5 / 0.8`.
+
+No new backend work: `POST /api/users` (`RegisterUserRequest.toSimulationParameters()`) already
+accepts all three fields and already creates both `User` and `Account` in one call
+(`RegisterAccountUseCase`). The sign-up screen only needs to collect Layer 1 + the nine answers,
+compute the three Layer 2 values client-side from the fixed mapping above, and call the existing
+endpoint — then log in with the same credentials, since registration returns `UserResponse`, not a
+token pair.
+
+**Recalibration trigger, post-match:** fires once per match, at the match's own terminal
+transition (`ACTIVE → EXPIRED` or `ACTIVE → REJECTED` — explicitly both, not just expiry), not
+once per individual date. Rejected finer-grained triggers (per-date, or trying to detect the
+in-person meeting itself) as too elaborate for what the System actually needs to know: not how
+many dates happened, whether they became a couple, or anything past that — "simply the time they
+spent together once they matched." A rematch (expire → match again with someone new) is a
+different match entirely with its own lifecycle, not a second data point on the same one. Inputs
+to the recalibration are indirect signals collected during the match's own active window — e.g.
+whether the reveal screen was ever opened at all — never an explicit rating prompt, for the same
+reason the sign-up questionnaire avoids one.
+
+**Known gap this surfaces:** `Match.reject()` records no domain event today (only `propose()`,
+`activate()`, and `expire()` do) — needed before this trigger can fire on the `REJECTED` side.
 
 ## Open questions
 

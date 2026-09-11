@@ -242,4 +242,9 @@ restraint, and fixed a centering bug and a near-invisible back control along the
 questions raised during that work are open, see `docs/architecture.md`: whether to add a name
 field (paused, not decided), whether match duration should ever be longer than the 12h demo
 default and what that means for the countdown display, and the still-missing `@Scheduled`
-auto-expiry job.
+auto-expiry job. `DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question,
+multiple-choice-only sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`,
+`attachmentIntensity`, `communicationProfile`; the rest is either derived already or deliberately
+left unasked), and post-match recalibration fires once per match at its terminal transition
+(`EXPIRED` or `REJECTED`), not per date. Decided, not yet implemented — no sign-up screen and no
+recalibration code exist yet, and `Match.reject()` still records no domain event.
