@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -227,7 +228,12 @@ export default function SignupScreen() {
               )}
             </View>
           ) : (
-            <View style={styles.form}>
+            <ScrollView
+              style={styles.flex}
+              contentContainerStyle={styles.form}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <Logo size={56} color={theme.fg} />
               <Text style={styles.headline}>Crear cuenta</Text>
 
@@ -359,7 +365,7 @@ export default function SignupScreen() {
                   </Text>
                 )}
               </Pressable>
-            </View>
+            </ScrollView>
           )}
         </Animated.View>
       </KeyboardAvoidingView>
