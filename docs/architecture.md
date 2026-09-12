@@ -708,14 +708,17 @@ data" and has more pedagogical weight (mutable-until-committed aggregate state, 
 
 **The conversion rule** (`ExpiryDurationPolicy`, `match.domain`, pure Java): the Engine's
 `expiryDays` — a simulated-day count from `run_simulation`, roughly `1..MAX_DAYS` (1000; "survived
-to the cap," i.e. a strong pair) — is linearly scaled into a real time window between a
-configurable `floor` (`pointeight.match.expiry-floor-seconds`, default 12h — matches the old flat
-default, so a poorly-predicted pair isn't punished relative to a match with no score yet) and
-`ceiling` (`expiry-ceiling-seconds`, default 7 days — enough to feel like more than the demo
-cadence without forcing a rethink of an hours/days-oriented countdown UI, a separate open question
-below). `compatibility-simulation-max-days` (default 1000) must track python-engine's own
-`MAX_DAYS` — the same manual cross-service sync point `DEC-013` already accepts for
-`modelVersion`, not solved differently here.
+to the cap," i.e. an exceptionally strong pair) — is scaled *geometrically*, not linearly, into a
+real time window between a configurable `floor` (`pointeight.match.expiry-floor-seconds`, default
+2h — as short as a single date) and `ceiling` (`expiry-ceiling-seconds`, default 1000 real days,
+~2.7 years, matching the simulation's own `MAX_DAYS` 1:1). Geometric interpolation (`floor *
+(ceiling/floor) ^ fraction`, linear in log-space) was chosen over linear specifically because a
+floor/ceiling ratio this wide would otherwise push every merely-average pair — not just the
+exceptional ones — past a year, since the midpoint of the raw range already sits there,
+sacrificing exactly the "most matches feel real, only exceptional ones feel like a real
+relationship" texture the range exists to produce. `compatibility-simulation-max-days` (default
+1000) must track python-engine's own `MAX_DAYS` — the same manual cross-service sync point
+`DEC-013` already accepts for `modelVersion`, not solved differently here.
 
 **`Match.expiryDuration` had to stop being `final`.** It was set once at `propose()` and never
 touched again; DEC-028 needed a guarded mutator, `applyExpiryDuration(Duration)`, restricted to
@@ -751,6 +754,58 @@ open question below: java-system has no equivalent of python-engine's `testconta
 from the M2/M3 synchronous design, orphaned since M4 moved `CompatibilityEnginePort.
 requestAssessment` to fire-and-forget `void` (`DEC-016`). Nothing had constructed one since; DEC-028
 is what actually implements the idea it represented.
+
+### DEC-029 — python-engine's collapse dynamics recalibrated so bad pairs actually collapse early
+
+A direct, real reaction to verifying `DEC-028` above: with real `expiryDays` flowing into a real
+duration, the Engine's own calibration became something Java-side scaling could no longer paper
+over.
+
+**What DEC-028's verification surfaced:** even a manually constructed, maximally toxic pair on
+both sides (`DISORGANIZED`, every Gottman weight ≥0.9, active addiction, infidelity history) came
+back with a median `expiryDays` around 580–625 out of 1000 across real batches. Bad predictions
+weren't reaching the short end of the real-duration range at all — not a Java-side scaling problem
+(already confirmed correct down to `expiryDays=1` in `ExpiryDurationPolicyTest`), but the actual
+distribution the Engine was producing.
+
+**Root cause:** `EmotionalState.STABLE`'s self-loop is 0.97 (already raised once, in M4, from an
+M3 value so low that `0.85 ** 130 ≈ 0` made it "essentially impossible for *any* pair, however
+compatible, to stay STABLE for a whole simulation" — see that comment in `app/domain/state.py`).
+`_PERTURBATION_STRENGTH` (0.4) only let a maximally negative day weaken that self-loop to ~93% —
+still highly sticky. Compounding that, `MoneyConflict`/`TrustBreach` (the two highest-negative
+scenarios) both have low `affinity_by_state` while `STABLE` (0.2/0.1), specifically to stop every
+pair converging toward the same mediocre survival odds (see that class's own comment) — but the
+side effect is that *escaping* `STABLE` in the first place draws mostly gentle scenarios even for
+a personality profile that would react badly to a real conflict. Net effect: even a maximally
+incompatible pair spent most of a thousand-day simulation just getting out of `STABLE` before real
+negative charge (and the ratio-based collapse hazard, `gottman.py`) could ever meaningfully engage.
+
+**The fix:** `_PERTURBATION_STRENGTH` raised from 0.4 to 1.0 — a single constant, not a rework of
+the transition table or the scenario-affinity design that already fixed a *different* over-collapse
+bug in M4. Verified empirically (the same "run real batches, look at the resulting distribution"
+method `MAX_COLLAPSE_PROBABILITY`'s own comment already documents, not a formula derived
+analytically) across five profile tiers, 300 simulations each, before/after:
+
+| Profile | Before: median expiryDays | After: median expiryDays |
+|---|---|---|
+| Very toxic (both sides) | 624 | 153–212 (range across runs) |
+| Moderately bad | 766 | 398–510 |
+| Neutral | 1000 | 1000 (unchanged) |
+| Good | 1000 | 1000 (unchanged) |
+| Very good | 1000 | 1000 (unchanged) |
+
+Neutral-and-better pairs are unaffected because their days are net *positive* — the self-loop
+strengthens under a positive `positivity`, same direction as before `_PERTURBATION_STRENGTH`
+changed, just more of it; only pairs whose days are net negative move at all. Confirmed live
+against the real stack too: a partially-toxic real match (one genuinely bad profile paired with a
+random pool candidate, so diluted compared to the controlled toxic-toxic test above) landed at
+`expiryDays` giving ~9.6 real days — a large, visible drop from the "months to ~2 years" this same
+kind of pairing produced before the fix.
+
+All 55 python-engine tests still pass unchanged (none hardcode an exact transition-weight number
+tied to `_PERTURBATION_STRENGTH`'s specific value, only relational ones like "positive rate >
+negative rate" and "stable pair survives more than volatile pair" — both hold, more clearly, after
+this change) — `black`/`mypy --strict` clean.
 
 ## Open questions
 
