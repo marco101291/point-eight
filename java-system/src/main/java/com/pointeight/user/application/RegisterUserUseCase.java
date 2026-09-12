@@ -1,5 +1,6 @@
 package com.pointeight.user.application;
 
+import com.pointeight.shared.domain.DomainEventPublisher;
 import com.pointeight.user.domain.Profile;
 import com.pointeight.user.domain.SimulationParameters;
 import com.pointeight.user.domain.User;
@@ -13,15 +14,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class RegisterUserUseCase {
 
   private final UserRepository users;
+  private final DomainEventPublisher events;
   private final Clock clock;
 
-  public RegisterUserUseCase(UserRepository users, Clock clock) {
+  public RegisterUserUseCase(UserRepository users, DomainEventPublisher events, Clock clock) {
     this.users = users;
+    this.events = events;
     this.clock = clock;
   }
 
   @Transactional
   public User execute(Profile profile, SimulationParameters parameters) {
-    return users.save(User.register(profile, parameters, clock));
+    User user = User.register(profile, parameters, clock);
+    User saved = users.save(user);
+    events.publishAll(user.pullEvents());
+    return saved;
   }
 }

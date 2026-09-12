@@ -202,6 +202,13 @@ Code comments and documentation **in English**. Code identifiers, in English.
   returns `200` with `{"status":"error","details":{"error":"InvalidCredentials"}}` — a per-message
   error inside a successful HTTP response, not an upload-time failure. Fix is re-uploading the same
   JSON into the **FCM V1** slot specifically.
+- **Merely importing `expo-notifications` (not calling anything on it) crashes the app on Android
+  in Expo Go**, since SDK 53 — a harder failure than the "remote push silently does nothing" trap
+  above. `mobile-client/app/index.tsx` imports `lib/pushNotifications.ts` unconditionally, so a
+  static `import * as Notifications from "expo-notifications"` at the top of that file took the
+  whole app down before any try/catch ever ran. Fixed by moving the `Constants.appOwnership ===
+  "expo"` check *before* the import and turning the import itself into a dynamic `await
+  import("expo-notifications")`, gated behind that check.
 
 ---
 
@@ -227,4 +234,25 @@ notification via a new `push` package (Expo's push service, `RestClient`) — ne
 build (Expo Go dropped remote push support in SDK 53) and the project owner's own Firebase project
 for FCM V1 credentials, both now set up; confirmed delivering real notifications to a physical
 device. M7 is closed. Still open: both sub-questions `DEC-021` raised (Layer 2 sourcing, date-end
-detection) — forward-looking product questions, not blocking anything built so far.
+detection) — forward-looking product questions, not blocking anything built so far. Post-M7 mobile
+polish continues on `feat/mobile-match-screen-redesign`: `DEC-025` split the reveal screen into a
+countdown-only route and a separate `/match-profile` detail route with a real back navigation,
+moved the visual language away from dating-app conventions toward the login screen's own
+restraint, and fixed a centering bug and a near-invisible back control along the way. Three
+questions raised during that work are open, see `docs/architecture.md`: whether to add a name
+field (paused, not decided), whether match duration should ever be longer than the 12h demo
+default and what that means for the countdown display, and (since `DEC-027`) how the countdown
+should read while a user genuinely has no match yet — that state is far more common now that
+matching is real. `DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question,
+multiple-choice-only sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`,
+`attachmentIntensity`, `communicationProfile`; the rest is either derived already or deliberately
+left unasked), and post-match recalibration fires once per match at its terminal transition
+(`EXPIRED` or `REJECTED`), not per date. The questionnaire and sign-up screen are built
+(`mobile-client/app/signup.tsx`); the recalibration trigger is still only a design decision, and
+`Match.reject()` still records no domain event, needed before it can fire on that side. `DEC-027`
+closes the gap both DEC-025 and DEC-026 surfaced — matching never actually happening on its own:
+`MatchExpiryScheduler` (`@Scheduled`, finally built — `Match.isDue()`'s javadoc had claimed this
+since M1) auto-expires due matches, and a new `UserRegisteredEvent` (`User` gained the same
+`pendingEvents` machinery `Match` already had) triggers `AssignNextMatchUseCase` the moment
+someone registers, no polling needed for that half. Turned out to be two separate mechanisms, not
+one job, once actually designed.

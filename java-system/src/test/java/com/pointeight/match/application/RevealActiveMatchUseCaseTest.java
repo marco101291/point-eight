@@ -31,6 +31,7 @@ class RevealActiveMatchUseCaseTest {
 
   private static final Clock CLOCK =
       Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+  private static final Duration TWELVE_HOURS = Duration.ofHours(12);
 
   private MatchRepository matches;
   private UserRepository users;
@@ -44,18 +45,20 @@ class RevealActiveMatchUseCaseTest {
   }
 
   @Test
-  void devuelve_el_perfil_de_la_contraparte_en_el_match_ACTIVE() {
+  void devuelve_el_perfil_de_la_contraparte_y_cuando_expira_el_match_ACTIVE() {
     User requester = sampleUser("Rosario", "docente");
     User counterpart = sampleUser("Buenos Aires", "arquitecta");
-    Match match = Match.propose(requester.id(), counterpart.id(), Duration.ofHours(12), CLOCK);
+    Match match = Match.propose(requester.id(), counterpart.id(), TWELVE_HOURS, CLOCK);
     match.activate(CLOCK);
 
     when(matches.findByUser(requester.id())).thenReturn(List.of(match));
     when(users.findById(counterpart.id())).thenReturn(Optional.of(counterpart));
 
-    Profile revealed = useCase.execute(requester.id());
+    ActiveMatchReveal revealed = useCase.execute(requester.id());
 
-    assertThat(revealed).isEqualTo(counterpart.profile());
+    assertThat(revealed.profile()).isEqualTo(counterpart.profile());
+    assertThat(revealed.expiresAt())
+        .isEqualTo(Instant.parse("2026-01-01T00:00:00Z").plus(TWELVE_HOURS));
   }
 
   @Test
@@ -63,20 +66,20 @@ class RevealActiveMatchUseCaseTest {
     User requester = sampleUser("Rosario", "docente");
     User counterpart = sampleUser("Buenos Aires", "arquitecta");
     // requester is userB this time, not userA
-    Match match = Match.propose(counterpart.id(), requester.id(), Duration.ofHours(12), CLOCK);
+    Match match = Match.propose(counterpart.id(), requester.id(), TWELVE_HOURS, CLOCK);
     match.activate(CLOCK);
 
     when(matches.findByUser(requester.id())).thenReturn(List.of(match));
     when(users.findById(counterpart.id())).thenReturn(Optional.of(counterpart));
 
-    assertThat(useCase.execute(requester.id())).isEqualTo(counterpart.profile());
+    assertThat(useCase.execute(requester.id()).profile()).isEqualTo(counterpart.profile());
   }
 
   @Test
   void sin_match_ACTIVE_no_hay_nada_que_revelar() {
     User requester = sampleUser("Rosario", "docente");
     User counterpart = sampleUser("Buenos Aires", "arquitecta");
-    Match pending = Match.propose(requester.id(), counterpart.id(), Duration.ofHours(12), CLOCK);
+    Match pending = Match.propose(requester.id(), counterpart.id(), TWELVE_HOURS, CLOCK);
 
     when(matches.findByUser(requester.id())).thenReturn(List.of(pending));
 
@@ -97,7 +100,7 @@ class RevealActiveMatchUseCaseTest {
   void una_contraparte_borrada_entre_medio_falla_igual() {
     User requester = sampleUser("Rosario", "docente");
     UserId counterpartId = UserId.newId();
-    Match match = Match.propose(requester.id(), counterpartId, Duration.ofHours(12), CLOCK);
+    Match match = Match.propose(requester.id(), counterpartId, TWELVE_HOURS, CLOCK);
     match.activate(CLOCK);
 
     when(matches.findByUser(requester.id())).thenReturn(List.of(match));

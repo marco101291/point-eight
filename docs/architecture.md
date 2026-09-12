@@ -361,8 +361,7 @@ SecureStore has no native backing there), and the reveal screen now has real loa
 states instead of a single hardcoded payload. Push notifications on activation are still open — no
 domain event exists for that transition yet, so there's nothing to trigger off of.
 
-**Two sub-questions raised at the same time, still open, revisit once auth and the reveal endpoint
-exist:**
+**Two sub-questions raised at the same time, resolved as `DEC-026` below:**
 - Where Layer 2 actually comes from in-fiction, once there's a real client: `User.recalibrate()`
   (M1, unused since) hints at the intended shape — a `TraitDerivation` baseline at registration,
   then ongoing recalibration from indirect post-date signals collected through the app (never an
@@ -544,6 +543,161 @@ delivery was confirmed twice on a physical Android device: once via a direct cal
 endpoint, once via a real `Match.activate()` → `MatchActivatedEvent` → listener →
 `ExpoPushNotificationSender` cycle. M7 is closed.
 
+### DEC-025 — Reveal screen split into countdown + profile detail, institutional look over dating-app conventions
+
+Post-M7 mobile polish, not a new milestone: the reveal screen's first version showed the
+countdown and Layer 1 data on one screen, expanding in place on tap. Two problems with that —
+visually it read as a generic dating-app card (full-bleed photo, rows of labeled data), which
+worked against the "the System observes you, you don't interrogate it" tone the login screen
+already established; and once the data was up, there was no way to collapse it again short of
+tapping the photo a second time, which doesn't read as an affordance.
+
+Replaced with two routes instead of one screen with two states. `app/index.tsx` now shows only
+the circular photo and a large countdown (`HH:MM:SS`, ticking client-side off the match's
+`expiresAt` — see below) — closer to the login screen's own restraint than a profile card.
+Tapping the photo runs a brief scale-bounce (`Animated`, no `react-native-reanimated` dependency)
+and pushes `app/match-profile.tsx`, a separate screen with its own circular photo, Layer 1 facts
+as plain centered serif text (no bordered rows — the earlier "table" look was explicitly the
+thing being moved away from), and a bordered "Volver" control. Closing it is a real back
+navigation, not a toggle, so it can't get stuck half-open.
+
+`match-profile.tsx` fetches its own reveal rather than receiving one through route params: if the
+match ends while the screen is open, the reveal call 404s, and rather than this screen trying to
+own that state too, it just shows a generic "no longer available" message and lets the user go
+back — `index.tsx`'s own `load()` discovers the real state (`no-match`) on return. This also
+needed `java-system` to start returning the match's own `expiresAt` alongside the counterpart's
+profile: `RevealActiveMatchUseCase` now returns `ActiveMatchReveal(profile, expiresAt)` instead of
+a bare `Profile`, and `RevealResponse` serializes both.
+
+Two layout bugs surfaced once this was actually used on a device, both from the same root cause:
+the "Volver" control lived in a normal flex row above the centered content, so its height pushed
+the content's vertical center down from the screen's true center — same-looking bug as "not
+centered," but actually a flex-flow issue. Fixed by making the top bar `position: absolute` so it
+floats over a `centerLayer` that owns the full screen height. The control itself was also nearly
+invisible: its border used `theme.line` (`#26262a`), a hair different from the screen's own
+background (`#0b0b0c`) — practically zero contrast. Switched to `theme.fg` for both this and the
+equivalent control in the error state. Separately, `router.back()` silently does nothing if the
+screen is ever reached with no navigation history behind it (e.g. a reload landing directly on
+this route) — `handleBack()` now checks `router.canGoBack()` first and falls back to
+`router.replace("/")`.
+
+### DEC-026 — Layer 2 sourcing: a multiple-choice sign-up questionnaire, and a match-level recalibration trigger
+
+Resolves both sub-questions `DEC-021` left open. The sign-up questionnaire below is now built
+(`mobile-client/app/signup.tsx`, `lib/layer2Questionnaire.ts`); the recalibration trigger is still
+only a design decision — no code for it exists yet.
+
+**At sign-up:** rejected an explicit "rate your personality" form outright — a user can't
+knowingly shape the model the System keeps of them, the same reasoning that keeps Layer 2 out of
+every response. Instead, a bank of indirect, scenario-based questions, each phrased as a concrete
+situation with fixed multiple-choice answers (never open text): free text would need AI/NLP
+classification to map onto a trait, which is both unreliable and gameable — a user can type
+anything, including nothing usable, and a scenario question with three fixed options can't be
+answered with garbage. Each option maps deterministically to a value, no inference step at
+request time.
+
+Scoped to exactly the `SimulationParameters` fields that are actually personality, not fact or
+derivable data: `infidelityHistory`, `relationshipHistory`, and `activeAddiction` are left
+unrequested by design (factual/sensitive, not something a scenario question can honestly surface);
+`stressBaseline` and `commitmentPaceExpectation` are already derived from profession/age per the
+spec (`TraitDerivation`), so asking about them would be redundant. That leaves `attachmentStyle`,
+`attachmentIntensity`, and `communicationProfile` — nine questions total:
+
+- **Attachment (4, → `attachmentStyle`):** each question offers one option leaning secure, one
+  anxious, one avoidant. Scored by plurality across all four: 3+ secure answers → `SECURE`;
+  otherwise, if both anxious- and avoidant-leaning answers appear at all → `DISORGANIZED`
+  (avoidant-anxious mixed, per attachment theory); otherwise whichever of anxious/avoidant has more
+  answers wins; a clean tie falls back to `SECURE`.
+- **Communication under conflict (4, → `communicationProfile`):** one question per horseman
+  (criticism, contempt, defensiveness, stonewalling — same field order as
+  `CommunicationProfile`'s constructor), each a "nunca / a veces / seguido" frequency scale mapped
+  to `0.1 / 0.4 / 0.8` for that field.
+- **Attachment intensity (1, → `attachmentIntensity`):** no field derives or asks this anywhere
+  else, so without a question it silently stays at the flat default (`0.5`) for every user. One
+  question, three options mapped to `0.2 / 0.5 / 0.8`.
+
+No new backend work was needed: `POST /api/users` (`RegisterUserRequest.toSimulationParameters()`)
+already accepted all three fields and already created both `User` and `Account` in one call
+(`RegisterAccountUseCase`). `signup.tsx` is one route, one question per screen (a fade transition
+between steps, a `n / 9` progress counter) rather than nine separate Expo Router routes — simpler
+state (one array of selected option indices) and no navigation-stack complexity for something
+that's really one linear flow. Layer 1 comes first, then the nine questions; the last answer
+submits immediately (no separate review step), computes the Layer 2 baseline client-side via
+`computeLayer2Baseline`, calls the existing endpoint, then logs in with the same credentials right
+after, since registration returns `UserResponse`, not a token pair. Rather than landing straight on
+the countdown screen, a confirmation view holds for a few seconds first — a ring animation and "En
+breve te asignaremos una pareja..." — auto-advancing on its own (or immediately on tap), the same
+"it decides, you're told" tone as the rest of the System rather than a "tap to continue" the user
+has to drive themselves.
+
+Verifying this end to end surfaced two things worth its own script: `scripts/seed-users.py`
+populates thousands of randomized users via the same `POST /api/users` endpoint, since
+`RandomEligibleCandidateStrategy` had almost nothing to pick from otherwise; and doing that
+surfaced the "no first match on registration" gap recorded in Open questions below.
+
+**Recalibration trigger, post-match:** fires once per match, at the match's own terminal
+transition (`ACTIVE → EXPIRED` or `ACTIVE → REJECTED` — explicitly both, not just expiry), not
+once per individual date. Rejected finer-grained triggers (per-date, or trying to detect the
+in-person meeting itself) as too elaborate for what the System actually needs to know: not how
+many dates happened, whether they became a couple, or anything past that — "simply the time they
+spent together once they matched." A rematch (expire → match again with someone new) is a
+different match entirely with its own lifecycle, not a second data point on the same one. Inputs
+to the recalibration are indirect signals collected during the match's own active window — e.g.
+whether the reveal screen was ever opened at all — never an explicit rating prompt, for the same
+reason the sign-up questionnaire avoids one.
+
+**Known gap this surfaces:** `Match.reject()` records no domain event today (only `propose()`,
+`activate()`, and `expire()` do) — needed before this trigger can fire on the `REJECTED` side.
+
+### DEC-027 — Two separate mechanisms close the "nothing ever triggers a match" gap, not one
+
+Closes both open questions `DEC-026` (and DEC-025 before it) left about matching never actually
+happening on its own: no auto-expiry, and no first match for a new registration. Originally
+assumed these belonged in one `@Scheduled` job; turned out to be two different *kinds* of trigger,
+and forcing them into one job would have meant polling for something registration can announce for
+free.
+
+**Auto-expiry stays genuinely time-driven** — nothing "happens" when a match's window runs out,
+there's no event to react to, so it needs a poll. `MatchExpiryScheduler`
+(`match.infrastructure`, `@Scheduled(fixedDelayString =
+"${pointeight.match.expiry-check-interval-ms:60000}")`, `SchedulingConfig` adds the
+`@EnableScheduling` nothing had turned on before) fetches every `ACTIVE` match in one page —
+deliberately not an incrementing-offset loop, since expiring a match removes it from the `ACTIVE`
+set mid-sweep, which would shift what "page 2" means out from under an offset-based scan; a single
+fetch sized to the current `ACTIVE` count sidesteps that entirely, the same "fine at this scale"
+tradeoff `AssignNextMatchUseCase`'s own candidate-pool fetch already makes. For each match past its
+`expiresAt` (`Match.isDue(clock)`), it calls `MatchLifecycleUseCases.expire()` — not a bespoke bulk
+update — so `MatchExpiredEventListener`'s existing rematch chain fires exactly as it already does
+for a manual `/expire` call. This job's only job is finding what's due.
+
+**First-match assignment turned out not to need polling at all.** A new registration is a real
+event happening at a real moment — there's no reason to wait up to a minute for the next scheduler
+tick to notice it when registration can announce it directly, the same way `Match.activate()`
+announces itself instead of something polling for `ACTIVE` matches with no notification sent yet.
+`User` gained the same `pendingEvents`/`pullEvents()` machinery `Match` already had (it had none
+before this — first time a second aggregate needed it), and `User.register()` now records
+`UserRegisteredEvent`. `RegisterUserUseCase.execute()` publishes it after `save()`, pulling events
+from the pre-save `user` object rather than the one `save()` returns — the adapter round-trips
+through `UserJpaMapper.toDomain()`, a fresh rehydrated instance with an empty event buffer, exactly
+the reason `MatchLifecycleUseCases.apply()` already pulls from `match`, not from what `matches.save`
+hands back. Since `RegisterUserUseCase` is only ever called from `RegisterAccountUseCase`
+(`@Transactional`, default propagation), the event fires only once both `User` and `Account` are
+durably committed together — not merely once the inner call returns.
+
+`UserRegisteredEventListener` (`match.infrastructure`, `AFTER_COMMIT`) reacts by calling the
+already-generic `AssignNextMatchUseCase.execute(userId)` — no changes needed there at all, it
+already just checks `hasOpenMatch` and searches for a candidate regardless of whether the caller is
+a fresh registration or a just-expired match. Deliberately placed in `match.infrastructure`, not
+`user.infrastructure`: matchmaking is a `match`-package concern reacting to a `user`-package event,
+the same direction `RevealActiveMatchUseCase` already crosses (`match` depending on `user`, never
+the reverse).
+
+**Known limitation:** the ~3000 users `scripts/seed-users.py` created before this shipped never
+got the event fired, so they stay matchless unless something re-triggers them — acceptable for now
+since their purpose was being a candidate *pool* for other users (`AssignNextMatchUseCase`'s
+random selection doesn't care whether a candidate itself has ever been matched), not being matched
+with each other.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -595,3 +749,23 @@ endpoint, once via a real `Match.activate()` → `MatchActivatedEvent` → liste
   directly onto the individual `RefreshTokenJpaRepository` methods instead, so each repository call
   commits independently the moment it returns — nothing left open to deadlock against, and nothing
   to roll back a revoke that already happened.
+- Raised and paused: adding a name field. Explicitly requested twice, pushed back on twice (it
+  breaks the structural non-name invariant documented as non-negotiable — see CLAUDE.md), confirmed
+  twice by the project owner, then paused mid-discussion ("mejor pensemos esto de nuevo") before any
+  code changed. No implementation exists. Needs the project owner to either resume or drop this
+  explicitly before it's touched again — not something to infer from later, unrelated requests.
+- `pointeight.match.default-expiry-seconds` is `43200` (12h) today, and every `Match` test uses the
+  same figure — it's never been exercised at the scale a real "how long are these two paired"
+  window might actually need (weeks, months). Nothing in `Match`'s own logic assumes hours (it's
+  plain `Instant`/`Duration` arithmetic), but `mobile-client`'s countdown display does: it formats
+  remaining time as `HH:MM:SS` with no cap, so a month-scale match would render as something like
+  `"720:00:00"` in the giant countdown DEC-025 just built. If match duration is ever meant to
+  reflect something closer to relationship length rather than a fast demo cadence, the countdown
+  display needs a different treatment at that scale (e.g. a coarser unit above some threshold), not
+  just a passing domain test with a longer `Duration`.
+- ~~No scheduler exists to auto-expire matches~~ and ~~a newly registered user never gets a first
+  match~~ — both closed by `DEC-027`: `MatchExpiryScheduler` polls for due matches,
+  `UserRegisteredEvent` + `UserRegisteredEventListener` handle first-match assignment without
+  polling. The ~3000 users seeded before `DEC-027` shipped stay matchless themselves (see DEC-027's
+  own "known limitation") — not re-triggered retroactively, since it wasn't needed for what they're
+  actually for (being candidates for other users, not getting matched with each other).
