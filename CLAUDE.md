@@ -209,6 +209,12 @@ Code comments and documentation **in English**. Code identifiers, in English.
   whole app down before any try/catch ever ran. Fixed by moving the `Constants.appOwnership ===
   "expo"` check *before* the import and turning the import itself into a dynamic `await
   import("expo-notifications")`, gated behind that check.
+- **A JPA `@Column(updatable = false)` silently drops that column from every `UPDATE`, no error or
+  warning.** Left over from when `Match.expiryDuration` was `final`; making the domain field
+  mutable (`DEC-028`) without removing the matching flag on `MatchJpaEntity` meant the whole
+  chain — domain method, use case, even the value right after `matches.save()` — worked perfectly,
+  and the database still never changed. None of java-system's (mock-only, no real Postgres) tests
+  could have caught it; only comparing against the actual running stack did.
 
 ---
 
@@ -240,10 +246,11 @@ countdown-only route and a separate `/match-profile` detail route with a real ba
 moved the visual language away from dating-app conventions toward the login screen's own
 restraint, and fixed a centering bug and a near-invisible back control along the way. Three
 questions raised during that work are open, see `docs/architecture.md`: whether to add a name
-field (paused, not decided), whether match duration should ever be longer than the 12h demo
-default and what that means for the countdown display, and (since `DEC-027`) how the countdown
-should read while a user genuinely has no match yet — that state is far more common now that
-matching is real. `DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question,
+field (paused, not decided), how the countdown display should scale now that `DEC-028` makes
+match duration genuinely variable (up to 7 real days, not a flat 12h) rather than a fixed number
+that would just need one bump, and (since `DEC-027`) how the countdown should read while a user
+genuinely has no match yet — that state is far more common now that matching is real. `DEC-026`
+resolves both sub-questions `DEC-021` left open — a nine-question,
 multiple-choice-only sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`,
 `attachmentIntensity`, `communicationProfile`; the rest is either derived already or deliberately
 left unasked), and post-match recalibration fires once per match at its terminal transition
@@ -255,4 +262,12 @@ closes the gap both DEC-025 and DEC-026 surfaced — matching never actually hap
 since M1) auto-expires due matches, and a new `UserRegisteredEvent` (`User` gained the same
 `pendingEvents` machinery `Match` already had) triggers `AssignNextMatchUseCase` the moment
 someone registers, no polling needed for that half. Turned out to be two separate mechanisms, not
-one job, once actually designed.
+one job, once actually designed. `DEC-028` derives a match's real duration from the Engine's own
+`expiryDays` prediction (`ExpiryDurationPolicy`, linearly scaled between a 12h floor and a 7-day
+ceiling) instead of the flat default — chosen over a simpler constant bump for being the more
+narratively honest reading of "the System decides based on data." Needed `Match.expiryDuration` to
+stop being `final` (guarded to `PENDING` only) and, as a real gap this surfaced rather than
+something it set out to fix, a new `MatchAssignedEventListener` so scoring itself finally runs
+automatically on every match instead of only via the manual `/score` endpoint. Cost the most time
+in this block: a `@Column(updatable = false)` left over from the immutable-field days silently
+dropped the new duration from every `UPDATE`, invisible to all 174 (mock-only) tests — see Traps.

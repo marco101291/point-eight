@@ -27,7 +27,8 @@ public class CompatibilityScoreResponseListener {
   @RabbitListener(queues = CompatibilityMessagingConfig.RESPONSE_QUEUE)
   public void on(CompatibilityScoreResponseMessage message) {
     try {
-      applyScore.execute(MatchId.of(message.matchId()), message.compatibilityScore());
+      applyScore.execute(
+          MatchId.of(message.matchId()), message.compatibilityScore(), message.expiryDays());
     } catch (RuntimeException e) {
       log.warn(
           "Could not apply the compatibility score for match {}: {}",

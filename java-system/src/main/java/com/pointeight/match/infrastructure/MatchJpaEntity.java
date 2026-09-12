@@ -32,7 +32,11 @@ public class MatchJpaEntity {
   @Column(name = "user_b_id", nullable = false, updatable = false)
   private UUID userBId;
 
-  @Column(name = "expiry_duration_seconds", nullable = false, updatable = false)
+  // Was `updatable = false` while the domain field was `final` — DEC-028 made it mutable
+  // (ExpiryDurationPolicy can replace the default while a match is still PENDING), and Hibernate
+  // silently drops a column marked updatable=false from every UPDATE statement, so that flag has
+  // to go too; otherwise the domain change has no effect at all, no error either.
+  @Column(name = "expiry_duration_seconds", nullable = false)
   private long expiryDurationSeconds;
 
   @Enumerated(EnumType.STRING)
