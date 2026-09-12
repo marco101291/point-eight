@@ -255,4 +255,12 @@ closes the gap both DEC-025 and DEC-026 surfaced — matching never actually hap
 since M1) auto-expires due matches, and a new `UserRegisteredEvent` (`User` gained the same
 `pendingEvents` machinery `Match` already had) triggers `AssignNextMatchUseCase` the moment
 someone registers, no polling needed for that half. Turned out to be two separate mechanisms, not
-one job, once actually designed.
+one job, once actually designed. `DEC-029` (`python-engine`, its own branch/PR — never mixed with
+`java-system` in one PR) is a direct reaction to verifying the still-open "match duration derived
+from the score" work (destined to be `DEC-028`): the Engine's own collapse dynamics almost never
+predicted an early collapse, even for a deliberately maximally toxic pair — `EmotionalState.
+STABLE`'s 0.97 self-loop (already raised once, in M4) barely budged under negativity
+(`_PERTURBATION_STRENGTH=0.4`). Raised to 1.0, verified empirically across five profile tiers,
+300 simulations each: bad pairs now collapse meaningfully earlier, neutral-and-better pairs are
+completely unaffected (their days are net positive, so the self-loop still strengthens, same
+direction as before).

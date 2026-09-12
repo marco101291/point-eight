@@ -73,7 +73,16 @@ TRANSITIONS: dict[EmotionalState, dict[EmotionalState, float]] = {
 }
 
 # How strongly a day's net positivity/negativity can shift the base transition weights.
-_PERTURBATION_STRENGTH = 0.4
+#
+# Raised from 0.4 (M4) to 1.0 once real Layer 2 data (java-system's DEC-028) showed even a
+# deliberately toxic pair (worst-case attachment/Gottman weights on both sides) needed a median
+# ~580 simulated days to collapse — the STABLE self-loop is 0.97, and even a maximally negative
+# day only weakened it to ~93% at 0.4, so genuinely incompatible pairs still spent most of a
+# thousand-day simulation escaping STABLE before real negative charge could ever accumulate. At
+# 1.0, a toxic pair's median expiry drops to ~210 simulated days (some collapsing in under a
+# dozen); a neutral-or-better pair is unaffected — its days are net positive, so the self-loop
+# strengthens instead of weakens, same direction as before, just more of it.
+_PERTURBATION_STRENGTH = 1.0
 
 
 @dataclass(frozen=True)
