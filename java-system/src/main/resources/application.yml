@@ -58,6 +58,15 @@ pointeight:
     candidate-pool-size: ${MATCH_CANDIDATE_POOL_SIZE:50}
     # How often MatchExpiryScheduler sweeps for ACTIVE matches past their expiresAt (ms).
     expiry-check-interval-ms: ${MATCH_EXPIRY_CHECK_INTERVAL_MS:60000}
+    # DEC-028: ExpiryDurationPolicy's real-time range for a score-derived match duration.
+    # Floor mirrors default-expiry-seconds on purpose — a poorly-predicted pair shouldn't get
+    # noticeably less real time than a match with no score yet. Ceiling is 7 days: enough to feel
+    # like more than the demo cadence without needing a countdown UI rethink for this alone.
+    expiry-floor-seconds: ${MATCH_EXPIRY_FLOOR_SECONDS:43200}
+    expiry-ceiling-seconds: ${MATCH_EXPIRY_CEILING_SECONDS:604800}
+    # Must match python-engine's own MAX_DAYS (app/domain/simulation.py) — same manual cross-service
+    # sync point DEC-013 already accepts for modelVersion, not solved differently here.
+    compatibility-simulation-max-days: ${MATCH_COMPATIBILITY_SIMULATION_MAX_DAYS:1000}
 
 logging:
   level:
