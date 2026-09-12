@@ -11,17 +11,26 @@ import com.pointeight.user.domain.UserId;
 import com.pointeight.user.domain.UserNotFoundException;
 import com.pointeight.user.domain.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Asks the Engine for a score for an already-created match. Kept separate from {@link
- * CreateManualMatchUseCase} on purpose: the trigger is {@code MatchAssignedEvent}/a manual
- * request, not match creation itself, so that change won't touch this class.
+ * CreateManualMatchUseCase} on purpose: the trigger is {@code MatchAssignedEvent} (DEC-028,
+ * {@code MatchAssignedEventListener}) or a manual request (the {@code /score} endpoint), not
+ * match creation itself, so that change won't touch this class.
  *
  * <p>Fire-and-forget since M4 (DEC in docs/architecture.md): this publishes the request over
  * {@code CompatibilityEnginePort} and returns immediately, with the match's score still whatever
  * it was before the call — {@link ApplyCompatibilityScoreUseCase} is what applies the score, once
  * it arrives asynchronously.
+ *
+ * <p>{@code REQUIRES_NEW}, same reasoning {@code AssignNextMatchUseCase} already documents: when
+ * called from {@code MatchAssignedEventListener}'s {@code AFTER_COMMIT} callback, the calling
+ * transaction's {@code EntityManager} is on its way out, so the default propagation would
+ * silently join that soon-to-be-discarded resource instead of opening a real one of its own. Safe
+ * for the manual HTTP path too — {@code REQUIRES_NEW} behaves like a plain new transaction when
+ * there's no surrounding one to suspend.
  */
 @Service
 public class RequestCompatibilityScoreUseCase {
@@ -37,7 +46,7 @@ public class RequestCompatibilityScoreUseCase {
     this.engine = engine;
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Match execute(MatchId id) {
     Match match = matches.findById(id).orElseThrow(() -> new MatchNotFoundException(id));
 
