@@ -26,7 +26,7 @@ public class Match {
   private final MatchId id;
   private final UserId userAId;
   private final UserId userBId;
-  private final Duration expiryDuration;
+  private Duration expiryDuration;
   private MatchStatus status;
   private CompatibilityScore compatibilityScore;
   private final Instant createdAt;
@@ -147,6 +147,25 @@ public class Match {
           "Cannot score match %s: it's already %s".formatted(id, status));
     }
     this.compatibilityScore = score;
+  }
+
+  /**
+   * Replaces the default duration assigned at {@link #propose} with one derived from the Engine's
+   * compatibility assessment ({@code ExpiryDurationPolicy}, DEC-028). Only while {@code PENDING}:
+   * once activated, {@link #expiresAt} is already anchored to {@code activatedAt} plus whatever
+   * duration was in effect at that moment, so changing it afterward would silently move a
+   * countdown someone might already be watching.
+   */
+  public void applyExpiryDuration(Duration newDuration) {
+    Objects.requireNonNull(newDuration, "newDuration");
+    if (newDuration.isZero() || newDuration.isNegative()) {
+      throw new IllegalArgumentException("newDuration must be positive, got " + newDuration);
+    }
+    if (status != MatchStatus.PENDING) {
+      throw new IllegalStateException(
+          "Cannot change the expiry duration for match %s: it's already %s".formatted(id, status));
+    }
+    this.expiryDuration = newDuration;
   }
 
   // --- Queries --------------------------------------------------------------

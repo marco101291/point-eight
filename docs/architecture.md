@@ -698,12 +698,68 @@ since their purpose was being a candidate *pool* for other users (`AssignNextMat
 random selection doesn't care whether a candidate itself has ever been matched), not being matched
 with each other.
 
+### DEC-028 — Match duration derived from the compatibility score, and scoring wired to actually run automatically
+
+Closes the Open question below about `expiryDays` never being applied — chose the option
+requiring real domain modeling (deriving duration from the Engine's own prediction) over a flat
+constant bump, since it's the more narratively honest reading of "the System decides based on
+data" and has more pedagogical weight (mutable-until-committed aggregate state, a
+`Duration.updatable=false` trap below) than changing one config value would.
+
+**The conversion rule** (`ExpiryDurationPolicy`, `match.domain`, pure Java): the Engine's
+`expiryDays` — a simulated-day count from `run_simulation`, roughly `1..MAX_DAYS` (1000; "survived
+to the cap," i.e. an exceptionally strong pair) — is scaled *geometrically*, not linearly, into a
+real time window between a configurable `floor` (`pointeight.match.expiry-floor-seconds`, default
+2h — as short as a single date) and `ceiling` (`expiry-ceiling-seconds`, default 1000 real days,
+~2.7 years, matching the simulation's own `MAX_DAYS` 1:1). Geometric interpolation (`floor *
+(ceiling/floor) ^ fraction`, linear in log-space) was chosen over linear specifically because a
+floor/ceiling ratio this wide would otherwise push every merely-average pair — not just the
+exceptional ones — past a year, since the midpoint of the raw range already sits there,
+sacrificing exactly the "most matches feel real, only exceptional ones feel like a real
+relationship" texture the range exists to produce. `compatibility-simulation-max-days` (default
+1000) must track python-engine's own `MAX_DAYS` — the same manual cross-service sync point
+`DEC-013` already accepts for `modelVersion`, not solved differently here.
+
+**`Match.expiryDuration` had to stop being `final`.** It was set once at `propose()` and never
+touched again; DEC-028 needed a guarded mutator, `applyExpiryDuration(Duration)`, restricted to
+`PENDING` — once `activate()` runs, `expiresAt()` is already anchored to `activatedAt` plus
+whatever duration was in effect at that instant, so changing it after the fact would silently move
+a countdown someone might already be watching. If the score arrives after activation, the match
+just keeps its original duration; nothing here tries to synchronize the two.
+
+**Scoring had never actually been wired to run on its own** — a real, separate gap this surfaced,
+not something DEC-028 set out to fix. `RequestCompatibilityScoreUseCase`'s own javadoc already
+named `MatchAssignedEvent` as an intended trigger, but nothing implemented it; scoring only ever
+happened via the manual `/score` endpoint. `MatchAssignedEventListener` (`match.infrastructure`,
+`AFTER_COMMIT`) closes that, so every new match now gets scored automatically — which is also what
+makes DEC-028 actually apply to real matches instead of only ones an operator scores by hand.
+`RequestCompatibilityScoreUseCase` needed the same `REQUIRES_NEW` propagation fix
+`AssignNextMatchUseCase`/`NotifyMatchActivatedUseCase` already carry, for the identical
+`AFTER_COMMIT`-EntityManager reason.
+
+**The trap that cost the most time in this block, and the reason 174 passing tests didn't catch
+it:** `applyExpiryDuration` worked correctly all the way through the domain and the use case —
+verified with a temporary debug log showing the derived `Duration` right after `matches.save()` —
+and still never reached Postgres. `MatchJpaEntity.expiryDurationSeconds` was still annotated
+`@Column(updatable = false)`, a leftover from when the domain field was `final`: Hibernate silently
+drops a column marked that way from every `UPDATE` statement, no error or warning either. None of
+java-system's 174 tests could have caught this — the whole suite runs against mocked repositories,
+never a real JPA/Postgres round trip (see `scripts/java-test.sh`'s own "63 tests, no Spring or
+Postgres" — still true in spirit at 174). Found only by testing against the real running stack and
+comparing the in-memory value to what actually landed in the database. Worth flagging as its own
+open question below: java-system has no equivalent of python-engine's `testcontainers`-backed tests
+(`DEC-019`), and this is exactly the class of bug that gap lets through.
+
+**Dead code removed:** `CompatibilityAssessment`/its test — a `score` + `suggestedExpiry` record
+from the M2/M3 synchronous design, orphaned since M4 moved `CompatibilityEnginePort.
+requestAssessment` to fire-and-forget `void` (`DEC-016`). Nothing had constructed one since; DEC-028
+is what actually implements the idea it represented.
+
 ### DEC-029 — python-engine's collapse dynamics recalibrated so bad pairs actually collapse early
 
-Number assumes "match duration derived from the compatibility score" lands as `DEC-028` (PR #8,
-open at the time of this branch, not yet merged) — this is a direct, real reaction to building
-that: with real `expiryDays` flowing into a real duration, the Engine's own calibration became
-something Java-side scaling could no longer paper over.
+A direct, real reaction to verifying `DEC-028` above: with real `expiryDays` flowing into a real
+duration, the Engine's own calibration became something Java-side scaling could no longer paper
+over.
 
 **What DEC-028's verification surfaced:** even a manually constructed, maximally toxic pair on
 both sides (`DISORGANIZED`, every Gottman weight ≥0.9, active addiction, infidelity history) came
@@ -770,15 +826,15 @@ this change) — `black`/`mypy --strict` clean.
   applied by `ApplyCompatibilityScoreUseCase`) — neither side publishes a `DomainEvent` for it today.
   Adding one would touch `RequestCompatibilityScoreUseCase`/`ApplyCompatibilityScoreUseCase`, not
   just `RecentEventsFeed`. If polling lag ever actually matters, revisit SSE then too.
-- The Engine's `expiryDays` (predicted survival, in the simulation's own day-clock — `MAX_DAYS =
-  1000` in `run_simulation`) reaches `CompatibilityScoreResponseMessage` on the Java side but is
-  never applied: `ApplyCompatibilityScoreUseCase` only assigns the score, `Match.expiryDuration`
-  stays whatever `default-expiry-seconds` (12h) or the manual override set at creation. Wiring it
-  through isn't just plumbing — `expiryDays` and the match's real expiry window are in genuinely
-  different units (a "survived" simulation reports `1000`, i.e. ~2.7 real years if read as
-  `Duration.ofDays`), and no conversion rule between simulated days and real match-window time has
-  ever been specified, here or in the spec doc. Needs that rule defined before it's implemented,
-  not a unit coercion.
+- ~~The Engine's `expiryDays` reaches Java but is never applied~~ — closed by `DEC-028`:
+  `ExpiryDurationPolicy` defines the conversion rule, `ApplyCompatibilityScoreUseCase` applies it
+  while the match is still `PENDING`.
+- java-system has no equivalent of python-engine's `testcontainers`-backed tests (`DEC-019`) — all
+  174 tests run against mocked repositories, never a real JPA/Postgres round trip. `DEC-028`'s own
+  trap (a `@Column(updatable = false)` silently dropping a column from every `UPDATE`) is exactly
+  the class of bug that gap lets through: everything upstream of persistence was verified correct,
+  including by a passing test suite, and the match still never actually changed in the database.
+  Worth a real integration-test layer at some point, not just more mock-based unit tests.
 - ~~`RefreshAccessTokenUseCase`'s rotation has a real race~~ and ~~no reuse-detection~~ — both
   closed. `RefreshTokenRepository#claim` is now an atomic, conditional `UPDATE ... WHERE used_at IS
   NULL`, so two concurrent `/refresh` calls on the same token can't both succeed; the loser calls

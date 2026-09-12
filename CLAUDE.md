@@ -209,6 +209,12 @@ Code comments and documentation **in English**. Code identifiers, in English.
   whole app down before any try/catch ever ran. Fixed by moving the `Constants.appOwnership ===
   "expo"` check *before* the import and turning the import itself into a dynamic `await
   import("expo-notifications")`, gated behind that check.
+- **A JPA `@Column(updatable = false)` silently drops that column from every `UPDATE`, no error or
+  warning.** Left over from when `Match.expiryDuration` was `final`; making the domain field
+  mutable (`DEC-028`) without removing the matching flag on `MatchJpaEntity` meant the whole
+  chain — domain method, use case, even the value right after `matches.save()` — worked perfectly,
+  and the database still never changed. None of java-system's (mock-only, no real Postgres) tests
+  could have caught it; only comparing against the actual running stack did.
 
 ---
 
@@ -240,14 +246,15 @@ countdown-only route and a separate `/match-profile` detail route with a real ba
 moved the visual language away from dating-app conventions toward the login screen's own
 restraint, and fixed a centering bug and a near-invisible back control along the way. Three
 questions raised during that work are open, see `docs/architecture.md`: whether to add a name
-field (paused, not decided), whether match duration should ever be longer than the 12h demo
-default and what that means for the countdown display, and (since `DEC-027`) how the countdown
-should read while a user genuinely has no match yet — that state is far more common now that
-matching is real. `DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question,
-multiple-choice-only sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`,
-`attachmentIntensity`, `communicationProfile`; the rest is either derived already or deliberately
-left unasked), and post-match recalibration fires once per match at its terminal transition
-(`EXPIRED` or `REJECTED`), not per date. The questionnaire and sign-up screen are built
+field (paused, not decided), how the countdown display should scale now that `DEC-028` makes
+match duration genuinely variable (2h to ~2.7 real years, not a flat 12h) rather than a fixed
+number that would just need one bump, and (since `DEC-027`) how the countdown should read while a
+user genuinely has no match yet — that state is far more common now that matching is real.
+`DEC-026` resolves both sub-questions `DEC-021` left open — a nine-question, multiple-choice-only
+sign-up questionnaire sources the Layer 2 baseline (`attachmentStyle`, `attachmentIntensity`,
+`communicationProfile`; the rest is either derived already or deliberately left unasked), and
+post-match recalibration fires once per match at its terminal transition (`EXPIRED` or
+`REJECTED`), not per date. The questionnaire and sign-up screen are built
 (`mobile-client/app/signup.tsx`); the recalibration trigger is still only a design decision, and
 `Match.reject()` still records no domain event, needed before it can fire on that side. `DEC-027`
 closes the gap both DEC-025 and DEC-026 surfaced — matching never actually happening on its own:
@@ -255,12 +262,22 @@ closes the gap both DEC-025 and DEC-026 surfaced — matching never actually hap
 since M1) auto-expires due matches, and a new `UserRegisteredEvent` (`User` gained the same
 `pendingEvents` machinery `Match` already had) triggers `AssignNextMatchUseCase` the moment
 someone registers, no polling needed for that half. Turned out to be two separate mechanisms, not
-one job, once actually designed. `DEC-029` (`python-engine`, its own branch/PR — never mixed with
-`java-system` in one PR) is a direct reaction to verifying the still-open "match duration derived
-from the score" work (destined to be `DEC-028`): the Engine's own collapse dynamics almost never
-predicted an early collapse, even for a deliberately maximally toxic pair — `EmotionalState.
-STABLE`'s 0.97 self-loop (already raised once, in M4) barely budged under negativity
-(`_PERTURBATION_STRENGTH=0.4`). Raised to 1.0, verified empirically across five profile tiers,
-300 simulations each: bad pairs now collapse meaningfully earlier, neutral-and-better pairs are
+one job, once actually designed. `DEC-028` derives a match's real duration from the Engine's own
+`expiryDays` prediction (`ExpiryDurationPolicy`, scaled geometrically — not linearly, a wide
+2h-to-1000-real-day range would otherwise push every merely-average pair past a year — between a
+2h floor and a 1000-real-day ceiling matching the simulation's own `MAX_DAYS` 1:1) instead of the
+flat default — chosen over a simpler constant bump for being the more narratively honest reading
+of "the System decides based on data." Needed `Match.expiryDuration` to stop being `final`
+(guarded to `PENDING` only) and, as a real gap this surfaced rather than something it set out to
+fix, a new `MatchAssignedEventListener` so scoring itself finally runs automatically on every
+match instead of only via the manual `/score` endpoint. Cost the most time in this block: a
+`@Column(updatable = false)` left over from the immutable-field days silently dropped the new
+duration from every `UPDATE`, invisible to all 174 (mock-only) tests — see Traps. `DEC-029`
+(`python-engine`, its own branch/PR — never mixed with `java-system` in one PR) is a direct
+reaction to verifying `DEC-028`: the Engine's own collapse dynamics almost never predicted an
+early collapse, even for a deliberately maximally toxic pair — `EmotionalState.STABLE`'s 0.97
+self-loop (already raised once, in M4) barely budged under negativity
+(`_PERTURBATION_STRENGTH=0.4`). Raised to 1.0, verified empirically across five profile tiers, 300
+simulations each: bad pairs now collapse meaningfully earlier, neutral-and-better pairs are
 completely unaffected (their days are net positive, so the self-loop still strengthens, same
 direction as before).

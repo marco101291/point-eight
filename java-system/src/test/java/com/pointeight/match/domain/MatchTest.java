@@ -233,6 +233,37 @@ class MatchTest {
   }
 
   @Nested
+  @DisplayName("expiry duration derived from the compatibility score (DEC-028)")
+  class ScoreDrivenExpiry {
+
+    @Test
+    void se_puede_cambiar_mientras_el_match_sigue_PENDING() {
+      Match match = pendingMatch();
+
+      match.applyExpiryDuration(Duration.ofDays(3));
+
+      assertThat(match.expiryDuration()).isEqualTo(Duration.ofDays(3));
+    }
+
+    @Test
+    void no_se_puede_cambiar_una_vez_ACTIVE() {
+      Match match = pendingMatch();
+      match.activate(clock);
+
+      assertThatThrownBy(() -> match.applyExpiryDuration(Duration.ofDays(3)))
+          .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void rechaza_una_duracion_no_positiva() {
+      Match match = pendingMatch();
+
+      assertThatThrownBy(() -> match.applyExpiryDuration(Duration.ZERO))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+  }
+
+  @Nested
   @DisplayName("expiry")
   class Expiry {
 

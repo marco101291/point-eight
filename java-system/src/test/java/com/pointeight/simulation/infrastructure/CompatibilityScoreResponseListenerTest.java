@@ -23,7 +23,7 @@ class CompatibilityScoreResponseListenerTest {
 
     listener.on(message);
 
-    verify(applyScore).execute(matchId, 0.61);
+    verify(applyScore).execute(matchId, 0.61, 40);
   }
 
   @Test
@@ -31,7 +31,7 @@ class CompatibilityScoreResponseListenerTest {
     MatchId matchId = MatchId.newId();
     CompatibilityScoreResponseMessage message =
         new CompatibilityScoreResponseMessage(matchId.toString(), "v0", 0.61, 40);
-    doThrow(new MatchNotFoundException(matchId)).when(applyScore).execute(matchId, 0.61);
+    doThrow(new MatchNotFoundException(matchId)).when(applyScore).execute(matchId, 0.61, 40);
 
     listener.on(message); // must not throw — a bad message shouldn't loop forever on requeue
   }
