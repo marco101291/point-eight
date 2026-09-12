@@ -159,25 +159,61 @@ function ActiveMatch({ reveal, onLogout }: { reveal: Reveal; onLogout: () => voi
           </Animated.View>
         </Pressable>
 
-        <Text style={styles.countdown}>{countdown}</Text>
+        <Text
+          style={styles.countdown}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.5}
+        >
+          {countdown}
+        </Text>
       </View>
     </SafeAreaView>
   );
 }
 
-/** Live HH:MM:SS until `expiresAtIso`, ticking every second. Floors at 00:00:00 — this screen
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+const AVG_MONTH_DAYS = 30.44;
+const AVG_YEAR_DAYS = 365.25;
+
+/** Live countdown until `expiresAtIso`, at a granularity that fits how far off it is — DEC-028
+ * made real match duration range from 2 hours to ~2.7 years, and `HH:MM:SS` ticking every second
+ * stops being legible (or even meaningful) past a day or two. Floors at 00:00:00 — this screen
  * doesn't poll on its own, so a match that actually expired while open just sits at zero until
- * the user navigates back and the next load() call finds it gone (404 -> "no-match"). */
+ * the user navigates back and the next load() call finds it gone (404 -> "no-match").
+ *
+ * <p>Re-derives its own tick interval every time it fires (a chain of `setTimeout`s, not a fixed
+ * `setInterval`) rather than picking one once at mount: a match with months left needs the label
+ * refreshed only occasionally, but as it nears expiry the same countdown has to speed back up to
+ * per-second ticks on its own, without remounting. */
 export function useCountdown(expiresAtIso: string): string {
   const [label, setLabel] = useState(() => formatRemaining(expiresAtIso));
 
   useEffect(() => {
-    setLabel(formatRemaining(expiresAtIso));
-    const interval = setInterval(() => setLabel(formatRemaining(expiresAtIso)), 1000);
-    return () => clearInterval(interval);
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    function tick() {
+      setLabel(formatRemaining(expiresAtIso));
+      timeoutId = setTimeout(tick, tickIntervalFor(expiresAtIso));
+    }
+
+    tick();
+    return () => clearTimeout(timeoutId);
   }, [expiresAtIso]);
 
   return label;
+}
+
+function tickIntervalFor(expiresAtIso: string): number {
+  const remainingMs = new Date(expiresAtIso).getTime() - Date.now();
+  if (remainingMs < 2 * DAY_MS) {
+    return 1000;
+  }
+  if (remainingMs < 90 * DAY_MS) {
+    return 60_000;
+  }
+  return HOUR_MS;
 }
 
 function formatRemaining(expiresAtIso: string): string {
@@ -185,11 +221,46 @@ function formatRemaining(expiresAtIso: string): string {
   if (remainingMs <= 0) {
     return "00:00:00";
   }
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":");
+
+  // Under 2 days: HH:MM:SS, same precision the countdown always had — this is the window where
+  // per-second urgency actually means something.
+  if (remainingMs < 2 * DAY_MS) {
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":");
+  }
+
+  const totalDays = Math.floor(remainingMs / DAY_MS);
+
+  // Under ~3 months: days and hours. Seconds (or even minutes) stop being useful information at
+  // this scale, and showing them would just make the countdown look like it's malfunctioning.
+  if (totalDays < 90) {
+    const hours = Math.floor((remainingMs % DAY_MS) / HOUR_MS);
+    return `${totalDays}d ${String(hours).padStart(2, "0")}h`;
+  }
+
+  // Beyond ~3 months: months, then years+months once there's at least one full year.
+  // Approximate on purpose — nobody needs day-level precision for "about 8 months left".
+  const totalMonths = Math.round(totalDays / AVG_MONTH_DAYS);
+  if (totalMonths < 12) {
+    return totalMonths <= 1 ? "1 mes" : `${totalMonths} meses`;
+  }
+
+  let years = Math.floor(totalDays / AVG_YEAR_DAYS);
+  let months = Math.round((totalDays - years * AVG_YEAR_DAYS) / AVG_MONTH_DAYS);
+  if (months >= 12) {
+    years += 1;
+    months = 0;
+  }
+
+  const yearsLabel = years === 1 ? "1 año" : `${years} años`;
+  if (months === 0) {
+    return yearsLabel;
+  }
+  const monthsLabel = months === 1 ? "1 mes" : `${months} meses`;
+  return `${yearsLabel} ${monthsLabel}`;
 }
 
 const styles = StyleSheet.create({
@@ -254,6 +325,7 @@ const styles = StyleSheet.create({
   photoWrap: {
     alignItems: "center",
     marginTop: 56,
+    paddingHorizontal: 24,
   },
   photoRing: {
     width: 200,
@@ -274,5 +346,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: 28,
     fontVariant: ["tabular-nums"],
+    width: "100%",
+    textAlign: "center",
   },
 });
