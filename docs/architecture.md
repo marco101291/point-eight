@@ -807,6 +807,48 @@ tied to `_PERTURBATION_STRENGTH`'s specific value, only relational ones like "po
 negative rate" and "stable pair survives more than volatile pair" — both hold, more clearly, after
 this change) — `black`/`mypy --strict` clean.
 
+### DEC-030 — java-system gets real Postgres-backed repository tests, closing the gap DEC-028's trap exposed
+
+Closes an Open question `DEC-028` raised: java-system had no equivalent of python-engine's
+`testcontainers`-backed tests (`DEC-019`) — every one of its 181 (now) tests ran against a mocked
+repository, which is exactly why the `@Column(updatable = false)` bug reached a running system
+undetected. `com.pointeight.support.PostgresIntegrationTest` (a shared, `static` — so JUnit starts
+it once per run, not once per test class — `@Container` Postgres with Spring Boot's
+`@ServiceConnection`, wiring the datasource automatically) is the base class; concrete tests use
+`@DataJpaTest` + `@AutoConfigureTestDatabase(replace = NONE)` + `@Import` of the adapter under test,
+Spring Data JPA's lightweight test slice rather than a full `@SpringBootTest`.
+
+`MatchRepositoryAdapterIT` covers save/reload round trips for every domain mutation `Match`
+exposes — including, deliberately, `applyExpiryDuration`, the exact regression: reintroducing
+`updatable = false` locally and rerunning made precisely that one test fail and no other, confirmed
+before reverting it. Getting a test that actually proves this took one non-obvious step: every test
+flushes and clears the persistence context (`TestEntityManager`) between saving and reloading —
+without that, `findById` just returns the same managed entity still sitting in Hibernate's
+first-level cache, whose Java field already carries whatever the mapper's setter last assigned,
+regardless of what the generated `UPDATE` actually included. That gap is *exactly* how the real bug
+stayed invisible the first time: correct in memory, silently wrong in the database.
+
+**The harder problem, and most of the time this cost:** wiring Testcontainers to actually run at
+all from inside `scripts/java-test.sh`'s Gradle container. That container had never needed Docker
+access before, so `docker.sock` wasn't mounted — fixed by mounting it plus `--group-add` for the
+socket's host GID (the plain `gradle` image has no matching group by name, so the non-root
+`--user` needs numeric supplementary access instead), the standard "Docker-outside-of-Docker"
+sibling-container pattern, not nested Docker-in-Docker.
+
+That alone wasn't enough: this host's Docker Engine is new enough (API 1.55, minimum supported
+1.40) to have dropped support for API versions old daemons used to tolerate, and testcontainers
+1.19.8 (Spring Boot 3.3.5's own pinned BOM version) has a Docker connectivity probe that pings at
+1.44 first but silently falls back to a hardcoded 1.32 on *any* exception from that first attempt —
+confirmed directly against the daemon (`curl --unix-socket … /v1.32/version` → 400 with that exact
+message, `/v1.40/_ping` → 200). Bumping just the `testcontainers` artifacts wasn't enough either:
+Spring's own BOM pins `com.github.docker-java`'s modules independently, so raising testcontainers
+alone still left `docker-java` (and, non-obviously, the `testcontainers` *core* artifact itself,
+pulled in transitively by both `junit-jupiter` and `postgresql`, each individually re-pinned by the
+same BOM) silently downgraded back to the versions Spring manages. `eachDependency` on
+`testRuntimeClasspath` forcing both groups (`org.testcontainers`, `com.github.docker-java`) to
+consistent newer versions was what actually fixed it — confirmed by reading the raw HTTP request
+Testcontainers sent (`User-Agent: tc-java/1.19.8`) before the fix and `1.21.4` after.
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -829,12 +871,9 @@ this change) — `black`/`mypy --strict` clean.
 - ~~The Engine's `expiryDays` reaches Java but is never applied~~ — closed by `DEC-028`:
   `ExpiryDurationPolicy` defines the conversion rule, `ApplyCompatibilityScoreUseCase` applies it
   while the match is still `PENDING`.
-- java-system has no equivalent of python-engine's `testcontainers`-backed tests (`DEC-019`) — all
-  174 tests run against mocked repositories, never a real JPA/Postgres round trip. `DEC-028`'s own
-  trap (a `@Column(updatable = false)` silently dropping a column from every `UPDATE`) is exactly
-  the class of bug that gap lets through: everything upstream of persistence was verified correct,
-  including by a passing test suite, and the match still never actually changed in the database.
-  Worth a real integration-test layer at some point, not just more mock-based unit tests.
+- ~~java-system has no equivalent of python-engine's `testcontainers`-backed tests~~ — closed by
+  `DEC-030`: `MatchRepositoryAdapterIT` runs against a real Postgres, and specifically regression-
+  tests the exact `@Column(updatable = false)` class of bug `DEC-028` found.
 - ~~`RefreshAccessTokenUseCase`'s rotation has a real race~~ and ~~no reuse-detection~~ — both
   closed. `RefreshTokenRepository#claim` is now an atomic, conditional `UPDATE ... WHERE used_at IS
   NULL`, so two concurrent `/refresh` calls on the same token can't both succeed; the loser calls

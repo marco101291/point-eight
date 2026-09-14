@@ -68,6 +68,12 @@ anymore for that case, only for the very first match between two users.
   `./scripts/java-test.sh`; **don't** suggest `gradle` or `./gradlew` directly. The script passes
   `--user $(id -u):$(id -g)` because, without that, the Gradle container leaves `build/` and
   `.gradle/` owned by root and breaks later deletions.
+- **`java-system`'s test suite needs Docker running too now** (`DEC-030`): `MatchRepositoryAdapterIT`
+  runs against a real Postgres via `testcontainers`, same reasoning as python-engine below.
+  `scripts/java-test.sh` mounts `/var/run/docker.sock` into the Gradle container plus
+  `--group-add` for the socket's host GID — Docker-outside-of-Docker (a sibling container sharing
+  the host daemon), not nested Docker-in-Docker; a bare-image `--user` has no group name matching
+  the socket's owner, so the numeric GID has to be added directly.
 - **Published ports come from `.env`**, and several aren't at the "obvious" value because they
   clashed with other projects running on the same machine (`alivia-postgres` occupies 5434, a
   `next-server` occupies 3000). They ended up as: System **8080**, Engine **8000**, panel **3006**,
@@ -215,6 +221,19 @@ Code comments and documentation **in English**. Code identifiers, in English.
   chain — domain method, use case, even the value right after `matches.save()` — worked perfectly,
   and the database still never changed. None of java-system's (mock-only, no real Postgres) tests
   could have caught it; only comparing against the actual running stack did.
+- **A new, very recent Docker Engine breaks old Testcontainers/docker-java defaults outright.**
+  Adding `testcontainers` to java-system (`DEC-030`) failed with `"client version 1.32 is too old.
+  Minimum supported API version is 1.40"` — confirmed directly against the daemon
+  (`curl --unix-socket /var/run/docker.sock http://localhost/v1.32/version` → 400, `/v1.40/_ping` →
+  200). Cause: Testcontainers 1.19.8's connectivity probe pings at API 1.44 first, but on *any*
+  exception there falls back to a hardcoded 1.32 — fine against old daemons, fatal against one new
+  enough to have dropped that low a floor. Bumping the `testcontainers` artifacts alone didn't fix
+  it: Spring Boot's own BOM independently re-pins `com.github.docker-java`'s modules *and* the
+  `testcontainers` core artifact itself (pulled in transitively by `junit-jupiter`/`postgresql`,
+  each separately re-pinned) back down regardless. Fixed with `eachDependency` on
+  `testRuntimeClasspath`, forcing both the `org.testcontainers` and `com.github.docker-java` groups
+  together — confirmed by reading the actual HTTP request Testcontainers sent
+  (`User-Agent: tc-java/1.19.8` before, `1.21.4` after).
 
 ---
 
@@ -280,4 +299,10 @@ self-loop (already raised once, in M4) barely budged under negativity
 (`_PERTURBATION_STRENGTH=0.4`). Raised to 1.0, verified empirically across five profile tiers, 300
 simulations each: bad pairs now collapse meaningfully earlier, neutral-and-better pairs are
 completely unaffected (their days are net positive, so the self-loop still strengthens, same
-direction as before).
+direction as before). `DEC-030` closes the gap `DEC-028`'s own trap exposed — java-system had no
+equivalent of python-engine's `testcontainers`-backed tests, which is exactly why that bug reached
+a running system undetected. `MatchRepositoryAdapterIT` runs every domain mutation `Match` exposes
+against a real Postgres and specifically regression-tests the `updatable = false` class of bug
+(confirmed: reintroducing it locally made exactly that one test fail, no others). Getting
+Testcontainers to run at all from inside `scripts/java-test.sh`'s container was the harder half —
+see Environment and Traps.
