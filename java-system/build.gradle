@@ -39,6 +39,35 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Real Postgres for repository-adapter tests (DEC in docs/architecture.md) — mirrors
+    // python-engine's own testcontainers setup (DEC-019). spring-boot-testcontainers gives
+    // @ServiceConnection, which wires the container's JDBC URL into the context automatically.
+    // Pinned above Spring Boot 3.3.5's own BOM version (1.19.8): that version's Docker connectivity
+    // probe hardcodes API version 1.32, which this host's Docker Engine (very new; its own minimum
+    // supported API version is already past that) flatly rejects — confirmed directly against the
+    // daemon (curl --unix-socket .../v1.32/version -> 400, .../v1.40/_ping -> 200).
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter:1.21.4'
+    testImplementation 'org.testcontainers:postgresql:1.21.4'
+}
+
+configurations.testRuntimeClasspath {
+    // Spring's own BOM pins every org.testcontainers/com.github.docker-java module to versions
+    // matching testcontainers 1.19.8 (docker-java 3.3.6), regardless of the newer testcontainers
+    // version declared above — including transitive modules never declared directly here (the
+    // testcontainers "core" artifact itself, pulled in by both junit-jupiter and postgresql).
+    // eachDependency catches the whole group instead of listing every module that shows up.
+    resolutionStrategy {
+        eachDependency { details ->
+            if (details.requested.group == 'org.testcontainers') {
+                details.useVersion '1.21.4'
+            }
+            if (details.requested.group == 'com.github.docker-java') {
+                details.useVersion '3.4.2'
+            }
+        }
+    }
 }
 
 tasks.named('test') {
