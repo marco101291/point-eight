@@ -44,6 +44,18 @@ class UserTest {
   }
 
   @Test
+  void registrar_un_match_observado_refuerza_la_confianza_y_actualiza_updatedAt() {
+    User user = User.register(sampleProfile(), null, clock);
+    Instant later = T0.plusSeconds(3600);
+
+    user.recordObservedMatch(Clock.fixed(later, ZoneOffset.UTC));
+
+    assertThat(user.cumulativeConfidenceScore())
+        .isEqualTo(ConfidenceScore.initial().reinforced());
+    assertThat(user.updatedAt()).isEqualTo(later);
+  }
+
+  @Test
   void rehidratar_no_emite_eventos() {
     User user =
         User.rehydrate(
