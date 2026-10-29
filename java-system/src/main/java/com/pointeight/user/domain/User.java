@@ -90,6 +90,14 @@ public class User {
     this.updatedAt = Instant.now(clock);
   }
 
+  /**
+   * One of this user's matches ran its course, so the System knows them a bit better (DEC-026's
+   * recalibration trigger). The rule itself lives in {@link ConfidenceScore#reinforced()}.
+   */
+  public void recordObservedMatch(Clock clock) {
+    adjustConfidence(cumulativeConfidenceScore.reinforced(), clock);
+  }
+
   /** Returns the accumulated events and clears the buffer. Idempotent on successive calls. */
   public List<DomainEvent> pullEvents() {
     List<DomainEvent> drained = List.copyOf(pendingEvents);

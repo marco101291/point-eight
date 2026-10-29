@@ -3,6 +3,7 @@ package com.pointeight.match.domain;
 import com.pointeight.match.domain.event.MatchActivatedEvent;
 import com.pointeight.match.domain.event.MatchAssignedEvent;
 import com.pointeight.match.domain.event.MatchExpiredEvent;
+import com.pointeight.match.domain.event.MatchRejectedEvent;
 import com.pointeight.shared.domain.DomainEvent;
 import com.pointeight.user.domain.UserId;
 import java.time.Clock;
@@ -128,8 +129,12 @@ public class Match {
   }
 
   public void reject(Clock clock) {
+    // Read before transitioning: afterwards the status is REJECTED either way.
+    boolean wasActive = status == MatchStatus.ACTIVE;
     transitionTo(MatchStatus.REJECTED);
     this.endedAt = Instant.now(clock);
+    this.pendingEvents.add(
+        new MatchRejectedEvent(id, userAId, userBId, wasActive, this.endedAt));
   }
 
   private void transitionTo(MatchStatus next) {
