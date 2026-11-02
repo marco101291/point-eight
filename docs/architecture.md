@@ -882,6 +882,29 @@ been updated after insert before, so nothing had proven an `UPDATE` carries it (
 Still open: a rejection doesn't trigger a rematch the way expiry does, so both users are left
 matchless until something else assigns them one; and `MatchRejectedEvent` isn't in the live feed
 yet (`RecentEventsFeed` + `admin-panel`, a separate PR).
+### DEC-032 — A match activates itself the moment its score lands
+
+**Context:** nothing ever called `activate()` except `POST /api/matches/{id}/activate` by hand —
+the oldest open question in this doc. With DEC-027 (auto-expiry, first match on registration) and
+DEC-028 (scoring runs on every assignment), that was the one manual step left in the whole cycle:
+every automatically assigned match sat in `PENDING` forever, and since `MatchExpiryScheduler` only
+expires `ACTIVE` matches, nothing downstream (expiry, rematch, recalibration) ever happened.
+Surfaced while planning a time-compressed demo of the full loop.
+
+**Decision:** `ApplyCompatibilityScoreUseCase` activates a `PENDING` match right after applying its
+score-derived duration, same transaction. The score is the last thing the System waits for — "it
+evaluates, then it reveals." Duration first, activation second: `activate()` anchors `expiresAt`
+to the duration in effect at that instant, and `applyExpiryDuration()` refuses anything past
+`PENDING`. A match already activated by hand keeps its duration and isn't re-activated.
+
+Rejected: activating at assignment time (the countdown would start on the 12h default before the
+Engine answered, and DEC-028's duration could never apply); and a demo-only activator (code that
+exists only for a video, while the real gap stays open).
+
+**Consequences:** `MatchActivatedEvent` now fires automatically, so every activation sends a real
+push notification (DEC-024) to whoever has a token — intended, but new. If the Engine is down,
+matches stay `PENDING` until it comes back (the score request is already queued in RabbitMQ, so
+they catch up on their own). `POST /api/matches/{id}/activate` stays, for manual matches and tests.
 
 ## Open questions
 
@@ -889,9 +912,8 @@ yet (`RecentEventsFeed` + `admin-panel`, a separate PR).
   does the engine keep its own event-fed replica? To be defined in M4.
 - Bump `modelVersion` to `"v1"` on the java-system side (DEC-013) — and once it's bumped, decide
   whether `modelVersion` should be validated on the AMQP path too, not just the REST one (DEC-016).
-- Who triggers `activate` on a `PENDING` match: today it's manual. The scheduler should either
-  activate it as soon as it's assigned, or leave `PENDING` as a preparation window with its own
-  timeout.
+- ~~Who triggers `activate` on a `PENDING` match~~ — closed by `DEC-032`: the score landing
+  does.
 - ~~`cumulativeConfidenceScore` exists but never moves~~ — closed by `DEC-031`: it measures the
   System's certainty about its model of the user, `1 - 0.8^n` after n observed matches.
 - A rejected match doesn't trigger a rematch (only `MatchExpiredEvent` does, DEC-015), so both

@@ -309,4 +309,6 @@ see Environment and Traps. `DEC-031` builds DEC-026's recalibration trigger: `Ma
 records `MatchRejectedEvent` (with `wasActive`), and `cumulativeConfidenceScore` finally moves —
 it's the System's certainty about its model of the user, `1 - 0.8^n` after n observed matches
 (`ConfidenceScore.reinforced()`), raised by `MatchEndedRecalibrationListener` →
-`RecordObservedMatchUseCase`. 195 Java tests. Still open: rejection doesn't rematch.
+`RecordObservedMatchUseCase`. 195 Java tests. Still open: rejection doesn't rematch. `DEC-032` closes the last manual step in the match cycle:
+`ApplyCompatibilityScoreUseCase` activates a `PENDING` match as soon as its score-derived
+duration is applied, so assign → score → activate → expire → rematch now runs unattended.
