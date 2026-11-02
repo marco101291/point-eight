@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.pointeight.match.domain.event.MatchActivatedEvent;
 import com.pointeight.match.domain.event.MatchAssignedEvent;
 import com.pointeight.match.domain.event.MatchExpiredEvent;
+import com.pointeight.match.domain.event.MatchRejectedEvent;
 import com.pointeight.user.domain.UserId;
 import java.time.Clock;
 import java.time.Duration;
@@ -147,12 +148,36 @@ class MatchTest {
     }
 
     @Test
-    void rechazar_no_emite_evento_de_expiracion() {
+    void rechazar_desde_PENDING_emite_MatchRejectedEvent_sin_haber_estado_activo() {
       Match match = pendingMatch();
-      match.pullEvents();
+      match.pullEvents(); // discard the assignment event
+
       match.reject(clock);
 
-      assertThat(match.pullEvents()).isEmpty();
+      assertThat(match.pullEvents())
+          .singleElement()
+          .isInstanceOfSatisfying(
+              MatchRejectedEvent.class,
+              event -> {
+                assertThat(event.userAId()).isEqualTo(alice);
+                assertThat(event.userBId()).isEqualTo(bob);
+                assertThat(event.wasActive()).isFalse();
+                assertThat(event.occurredAt()).isEqualTo(T0);
+              });
+    }
+
+    @Test
+    void rechazar_desde_ACTIVE_emite_MatchRejectedEvent_habiendo_estado_activo() {
+      Match match = pendingMatch();
+      match.activate(clock);
+      match.pullEvents(); // discard the assignment and activation events
+
+      match.reject(clock);
+
+      assertThat(match.pullEvents())
+          .singleElement()
+          .isInstanceOfSatisfying(
+              MatchRejectedEvent.class, event -> assertThat(event.wasActive()).isTrue());
     }
   }
 

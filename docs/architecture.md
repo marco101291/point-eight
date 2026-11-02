@@ -849,6 +849,40 @@ same BOM) silently downgraded back to the versions Spring manages. `eachDependen
 consistent newer versions was what actually fixed it — confirmed by reading the raw HTTP request
 Testcontainers sent (`User-Agent: tc-java/1.19.8`) before the fix and `1.21.4` after.
 
+### DEC-031 — Post-match recalibration built: `MatchRejectedEvent`, and confidence as certainty, not quality
+
+**Context:** DEC-026 decided *when* recalibration fires (once per match, at `EXPIRED` or
+`REJECTED`) but left two things unbuilt: `Match.reject()` recorded no domain event at all, and
+`cumulativeConfidenceScore` had no rule — it was born at 0.0 and never moved. Its own javadoc
+("confidence in the System") and the spec (just a field name) didn't agree on what it meant.
+
+**Decision:**
+- `Match.reject()` now records `MatchRejectedEvent`, carrying `wasActive`. `PENDING → REJECTED`
+  stays legal, but a match rejected before it ever started observed nothing about either user, so
+  only `wasActive == true` counts toward recalibration — the event says which case it was, the
+  listener doesn't have to reload the match to find out.
+- `cumulativeConfidenceScore` is **the System's certainty about its own model of the user**, not a
+  grade on how their matches went. Every observed match raises it, whatever the outcome — closer to
+  Hang the DJ's "this is simulation 998 of 1000" than to a rating. Chosen over an outcome-quality
+  reading partly because that one would have turned a field `UserResponse` already exposes into a
+  visible verdict on the user, edging toward Layer 2.
+- The rule, `ConfidenceScore.reinforced()`: close 20% of the remaining gap to 1.0 each time, so
+  after n matches the score is `1 - 0.8^n` (1 → 0.20, 5 → 0.67, 10 → 0.89). Diminishing returns,
+  can't overshoot, needs no match counter stored anywhere.
+- Wiring: `MatchEndedRecalibrationListener` (`match/infrastructure`, `AFTER_COMMIT`) calls
+  `RecordObservedMatchUseCase` (`user/application`, `REQUIRES_NEW` — DEC-015's reasoning) for both
+  users. It's a separate listener from `MatchExpiredEventListener`, not a second job inside it:
+  rematch and recalibration are independent reactions, and one failing mustn't stop the other. The
+  use case takes a bare `UserId`, so `user` still knows nothing about `match` (the dependency
+  between features keeps running `match → user` only, as `UserRegisteredEventListener` already
+  did).
+
+**Consequences:** `UserRepositoryAdapterIT` joins `MatchRepositoryAdapterIT` — the score had never
+been updated after insert before, so nothing had proven an `UPDATE` carries it (DEC-030's lesson).
+Still open: a rejection doesn't trigger a rematch the way expiry does, so both users are left
+matchless until something else assigns them one; and `MatchRejectedEvent` isn't in the live feed
+yet (`RecentEventsFeed` + `admin-panel`, a separate PR).
+
 ## Open questions
 
 - Profile synchronization strategy toward `python-engine`: does the payload carry full profiles, or
@@ -858,9 +892,11 @@ Testcontainers sent (`User-Agent: tc-java/1.19.8`) before the fix and `1.21.4` a
 - Who triggers `activate` on a `PENDING` match: today it's manual. The scheduler should either
   activate it as soon as it's assigned, or leave `PENDING` as a preparation window with its own
   timeout.
-- `cumulativeConfidenceScore` exists but never moves: still need to define how a match's outcome
-  adjusts it. Depends on having real predictions from the Engine (M3, done) — the adjustment rule
-  itself is still undefined.
+- ~~`cumulativeConfidenceScore` exists but never moves~~ — closed by `DEC-031`: it measures the
+  System's certainty about its model of the user, `1 - 0.8^n` after n observed matches.
+- A rejected match doesn't trigger a rematch (only `MatchExpiredEvent` does, DEC-015), so both
+  users stay matchless after a rejection. `MatchRejectedEvent` exists now (DEC-031), so wiring it is
+  a listener away — but whether a rejection *should* rematch immediately is a product call.
 - Candidate pool for `AssignNextMatchUseCase` (DEC-014) is the first N registered users, filtered in
   memory — no query pushes Layer 1 reciprocity or availability down to the database. Fine at this
   scale, not something to carry into M5 unexamined.
