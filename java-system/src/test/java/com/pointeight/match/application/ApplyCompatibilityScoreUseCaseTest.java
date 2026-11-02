@@ -10,11 +10,15 @@ import com.pointeight.match.domain.Match;
 import com.pointeight.match.domain.MatchId;
 import com.pointeight.match.domain.MatchNotFoundException;
 import com.pointeight.match.domain.MatchRepository;
+import com.pointeight.match.domain.MatchStatus;
+import com.pointeight.match.domain.event.MatchActivatedEvent;
+import com.pointeight.shared.domain.DomainEventPublisher;
 import com.pointeight.user.domain.UserId;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -26,8 +30,10 @@ class ApplyCompatibilityScoreUseCaseTest {
   private static final int SIMULATION_MAX_DAYS = 1000;
 
   private final MatchRepository matches = mock(MatchRepository.class);
+  private final DomainEventPublisher events = mock(DomainEventPublisher.class);
   private final ApplyCompatibilityScoreUseCase useCase =
-      new ApplyCompatibilityScoreUseCase(matches, FLOOR_SECONDS, CEILING_SECONDS, SIMULATION_MAX_DAYS);
+      new ApplyCompatibilityScoreUseCase(
+          matches, events, CLOCK, FLOOR_SECONDS, CEILING_SECONDS, SIMULATION_MAX_DAYS);
 
   @Test
   void assigns_the_score_and_saves() {
@@ -73,5 +79,48 @@ class ApplyCompatibilityScoreUseCaseTest {
     useCase.execute(match.id(), 0.9, SIMULATION_MAX_DAYS);
 
     assertThat(match.expiryDuration()).isEqualTo(Duration.ofHours(12));
+  }
+
+  @Test
+  void un_match_PENDING_se_activa_con_la_duracion_ya_derivada_del_score() {
+    Match match = Match.propose(UserId.newId(), UserId.newId(), Duration.ofHours(12), CLOCK);
+    when(matches.findById(match.id())).thenReturn(Optional.of(match));
+    when(matches.save(match)).thenReturn(match);
+
+    useCase.execute(match.id(), 0.9, SIMULATION_MAX_DAYS);
+
+    assertThat(match.status()).isEqualTo(MatchStatus.ACTIVE);
+    assertThat(match.expiresAt())
+        .contains(Instant.parse("2026-01-01T00:00:00Z").plus(Duration.ofDays(1000)));
+  }
+
+  @Test
+  void publica_MatchActivatedEvent_al_activar() {
+    UserId userAId = UserId.newId();
+    UserId userBId = UserId.newId();
+    Match match = Match.propose(userAId, userBId, Duration.ofHours(12), CLOCK);
+    match.pullEvents(); // discard the assignment event, as CreateManualMatchUseCase already did
+    when(matches.findById(match.id())).thenReturn(Optional.of(match));
+    when(matches.save(match)).thenReturn(match);
+
+    useCase.execute(match.id(), 0.9, SIMULATION_MAX_DAYS);
+
+    verify(events)
+        .publishAll(
+            List.of(new MatchActivatedEvent(match.id(), userAId, userBId, Instant.now(CLOCK))));
+  }
+
+  @Test
+  void un_match_ya_ACTIVE_no_se_vuelve_a_activar_ni_publica_nada() {
+    Match match = Match.propose(UserId.newId(), UserId.newId(), Duration.ofHours(12), CLOCK);
+    match.activate(CLOCK);
+    match.pullEvents();
+    when(matches.findById(match.id())).thenReturn(Optional.of(match));
+    when(matches.save(match)).thenReturn(match);
+
+    useCase.execute(match.id(), 0.9, SIMULATION_MAX_DAYS);
+
+    assertThat(match.status()).isEqualTo(MatchStatus.ACTIVE);
+    verify(events).publishAll(List.of());
   }
 }
