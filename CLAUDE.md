@@ -305,6 +305,10 @@ a running system undetected. `MatchRepositoryAdapterIT` runs every domain mutati
 against a real Postgres and specifically regression-tests the `updatable = false` class of bug
 (confirmed: reintroducing it locally made exactly that one test fail, no others). Getting
 Testcontainers to run at all from inside `scripts/java-test.sh`'s container was the harder half —
-see Environment and Traps. `DEC-032` closes the last manual step in the match cycle:
+see Environment and Traps. `DEC-031` builds DEC-026's recalibration trigger: `Match.reject()`
+records `MatchRejectedEvent` (with `wasActive`), and `cumulativeConfidenceScore` finally moves —
+it's the System's certainty about its model of the user, `1 - 0.8^n` after n observed matches
+(`ConfidenceScore.reinforced()`), raised by `MatchEndedRecalibrationListener` →
+`RecordObservedMatchUseCase`. 195 Java tests. Still open: rejection doesn't rematch. `DEC-032` closes the last manual step in the match cycle:
 `ApplyCompatibilityScoreUseCase` activates a `PENDING` match as soon as its score-derived
 duration is applied, so assign → score → activate → expire → rematch now runs unattended.
